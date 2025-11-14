@@ -23,7 +23,7 @@ export default function LoginPage() {
       
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
-        router.push('/');
+        router.replace('/');
       }
     };
     
@@ -50,9 +50,13 @@ export default function LoginPage() {
 
       if (error) throw error;
 
-      if (data.user) {
+      if (data.session) {
+        // Salvar token no cookie manualmente para o middleware
+        document.cookie = `sb-access-token=${data.session.access_token}; path=/; max-age=3600`;
+        
         // Redirecionar para a página inicial
-        window.location.href = '/';
+        router.replace('/');
+        router.refresh();
       }
     } catch (err: any) {
       setError(err.message || 'Erro ao fazer login. Verifique suas credenciais.');

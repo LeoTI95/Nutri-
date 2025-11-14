@@ -1,12 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { LogIn, Lock, User } from 'lucide-react';
+import { LogIn, Lock, Mail } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 export default function LoginPage() {
-  const router = useRouter();
   const [formData, setFormData] = useState({
     email: '',
     password: ''
@@ -26,7 +24,7 @@ export default function LoginPage() {
     }
 
     try {
-      // Tenta fazer login com Supabase Auth
+      // Autenticação com Supabase
       const { data, error: authError } = await supabase.auth.signInWithPassword({
         email: formData.email,
         password: formData.password,
@@ -38,14 +36,9 @@ export default function LoginPage() {
         return;
       }
 
-      if (data.user) {
-        // Login bem-sucedido - aguarda a sessão ser estabelecida
-        // Pequeno delay para garantir que a sessão foi salva
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
-        // Redireciona usando router.push para navegação SPA
-        router.push('/agenda');
-        router.refresh(); // Força refresh para atualizar o estado de autenticação
+      if (data.session) {
+        // Redireciona para dashboard após login bem-sucedido
+        window.location.href = '/dashboard';
       }
     } catch (err) {
       setError('Erro ao conectar com o servidor. Tente novamente.');
@@ -54,63 +47,49 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         {/* Logo e Título */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 shadow-2xl mb-4">
-            <span className="text-3xl font-bold text-white">C+</span>
+          <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-green-500 to-emerald-600 shadow-xl mb-4">
+            <span className="text-3xl font-bold text-white">N+</span>
           </div>
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent mb-2">
-            ClinicAgenda
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+            Bem-vindo de volta
           </h1>
-          <p className="text-gray-600 dark:text-gray-400">
-            Sistema de Agendamento de Consultas
+          <p className="text-gray-600">
+            Entre com suas credenciais para acessar o sistema
           </p>
         </div>
 
         {/* Card de Login */}
-        <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl p-8 border border-gray-200 dark:border-gray-800">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-emerald-100 dark:bg-emerald-950">
-              <LogIn className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
-            </div>
-            <div>
-              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-                Entrar no Sistema
-              </h2>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                Acesse sua conta
-              </p>
-            </div>
-          </div>
-
+        <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100">
           {error && (
-            <div className="mb-4 p-4 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg">
-              <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+            <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+              <p className="text-sm text-red-600">{error}</p>
             </div>
           )}
 
-          <form onSubmit={handleLogin} className="space-y-4">
+          <form onSubmit={handleLogin} className="space-y-5">
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
                 Email
               </label>
               <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
                 <input
                   type="email"
                   required
                   value={formData.email}
                   onChange={(e) => setFormData({...formData, email: e.target.value})}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
+                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
                   placeholder="seu@email.com"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
                 Senha
               </label>
               <div className="relative">
@@ -120,7 +99,7 @@ export default function LoginPage() {
                   required
                   value={formData.password}
                   onChange={(e) => setFormData({...formData, password: e.target.value})}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
+                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
                   placeholder="••••••••"
                 />
               </div>
@@ -129,7 +108,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3 px-4 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-medium rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="w-full py-3 px-4 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-medium rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {loading ? (
                 <>
@@ -146,18 +125,25 @@ export default function LoginPage() {
           </form>
 
           <div className="mt-6 text-center">
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              Esqueceu sua senha?{' '}
-              <a href="#" className="text-emerald-600 dark:text-emerald-400 hover:underline font-medium">
-                Recuperar acesso
+            <p className="text-sm text-gray-600">
+              Não tem uma conta?{' '}
+              <a href="#" className="text-green-600 hover:underline font-medium">
+                Cadastre-se
               </a>
             </p>
           </div>
         </div>
 
         <div className="mt-6 text-center">
-          <p className="text-sm text-gray-600 dark:text-gray-400">
-            © 2024 ClinicAgenda. Todos os direitos reservados.
+          <p className="text-xs text-gray-500">
+            Ao continuar, você concorda com nossos{' '}
+            <a href="#" className="text-green-600 hover:underline">
+              Termos de Uso
+            </a>{' '}
+            e{' '}
+            <a href="#" className="text-green-600 hover:underline">
+              Política de Privacidade
+            </a>
           </p>
         </div>
       </div>

@@ -11,6 +11,8 @@ export const supabase = (supabaseUrl && supabaseAnonKey)
         autoRefreshToken: true,
         detectSessionInUrl: true,
         storage: typeof window !== 'undefined' ? window.localStorage : undefined,
+        storageKey: 'nutri-plus-auth',
+        flowType: 'pkce'
       }
     })
   : null;
@@ -18,4 +20,12 @@ export const supabase = (supabaseUrl && supabaseAnonKey)
 // Helper para verificar se o Supabase está configurado
 export const isSupabaseConfigured = () => {
   return supabase !== null;
+};
+
+// Helper para verificar autenticação
+export const checkAuth = async () => {
+  if (!supabase) return null;
+  
+  const { data: { session } } = await supabase.auth.getSession();
+  return session;
 };

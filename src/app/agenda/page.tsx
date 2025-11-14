@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Calendar, Clock, Users, UserCheck, Plus, X, Filter } from 'lucide-react';
+import { Calendar, Clock, Users, UserCheck, Plus, X, ChevronLeft, Filter } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { AuthenticatedLayout } from '@/components/custom/authenticated-layout';
 
@@ -133,118 +133,127 @@ export default function AgendaPage() {
     setShowAddModal(true);
   };
 
-  const filteredAppointments = appointments.filter(app => {
-    if (selectedProfessional === 'all') return true;
-    return app.professional_id === selectedProfessional;
-  });
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString + 'T00:00:00');
+    return date.toLocaleDateString('pt-BR', { 
+      weekday: 'long', 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric' 
+    });
+  };
+
+  const scheduledCount = appointments.filter(app => app.status === 'scheduled').length;
+  const attendedCount = appointments.filter(app => app.status === 'attended').length;
+  const availableSlots = timeSlots.length - appointments.length;
 
   return (
     <AuthenticatedLayout>
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-950 p-6">
-        <div className="max-w-7xl mx-auto">
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-              Agenda de Atendimentos
-            </h1>
-            <p className="text-gray-600 dark:text-gray-400">
-              Gerencie os agendamentos por horário e profissional
-            </p>
-          </div>
-
-          {/* Cards de Estatísticas */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            <div className="bg-white dark:bg-gray-900 p-6 rounded-lg shadow-sm border border-gray-200 dark:border-gray-800">
-              <div className="flex items-center">
-                <Calendar className="h-8 w-8 text-blue-600" />
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Agendados Hoje</p>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                    {appointments.filter(app => app.status === 'scheduled').length}
-                  </p>
-                </div>
+      <div className="min-h-screen bg-white">
+        <div className="max-w-7xl mx-auto p-6">
+          {/* Header com botão voltar */}
+          <div className="mb-6">
+            <button className="flex items-center gap-2 text-green-600 hover:text-green-700 mb-4">
+              <ChevronLeft className="h-5 w-5" />
+              <span className="font-medium">Voltar</span>
+            </button>
+            
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-3xl font-bold text-gray-900 mb-1">
+                  Minha Agenda
+                </h1>
+                <p className="text-gray-600 capitalize">
+                  {formatDate(selectedDate)}
+                </p>
               </div>
-            </div>
-
-            <div className="bg-white dark:bg-gray-900 p-6 rounded-lg shadow-sm border border-gray-200 dark:border-gray-800">
-              <div className="flex items-center">
-                <Clock className="h-8 w-8 text-green-600" />
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Slots Disponíveis</p>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                    {timeSlots.length - appointments.length}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white dark:bg-gray-900 p-6 rounded-lg shadow-sm border border-gray-200 dark:border-gray-800">
-              <div className="flex items-center">
-                <Users className="h-8 w-8 text-purple-600" />
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Pacientes</p>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                    {new Set(appointments.map(app => app.patient_id)).size}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white dark:bg-gray-900 p-6 rounded-lg shadow-sm border border-gray-200 dark:border-gray-800">
-              <div className="flex items-center">
-                <UserCheck className="h-8 w-8 text-orange-600" />
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Profissionais</p>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                    {professionals.length}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Filtros e Controles */}
-          <div className="bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-200 dark:border-gray-800 mb-6">
-            <div className="p-6">
-              <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <Filter className="h-5 w-5 text-gray-600 dark:text-gray-400" />
-                  <select
-                    value={selectedProfessional}
-                    onChange={(e) => setSelectedProfessional(e.target.value)}
-                    className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                  >
-                    <option value="all">Todos os Profissionais</option>
-                    {professionals.map((prof) => (
-                      <option key={prof.id} value={prof.id}>
-                        {prof.name} - {prof.specialty}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
+              
+              <div className="flex items-center gap-4">
                 <input
                   type="date"
                   value={selectedDate}
                   onChange={(e) => setSelectedDate(e.target.value)}
-                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                  className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
                 />
               </div>
             </div>
           </div>
 
-          {/* Lista de Slots */}
-          <div className="bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-200 dark:border-gray-800">
-            <div className="p-6 border-b border-gray-200 dark:border-gray-800">
-              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+          {/* Cards de Estatísticas */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600 mb-1">Total de Pacientes</p>
+                  <p className="text-3xl font-bold text-gray-900">{scheduledCount}</p>
+                </div>
+                <Users className="h-10 w-10 text-green-600" />
+              </div>
+            </div>
+
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600 mb-1">Agendados</p>
+                  <p className="text-3xl font-bold text-gray-900">{scheduledCount}</p>
+                </div>
+                <Calendar className="h-10 w-10 text-blue-600" />
+              </div>
+            </div>
+
+            <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600 mb-1">Atendidos</p>
+                  <p className="text-3xl font-bold text-gray-900">{attendedCount}</p>
+                </div>
+                <UserCheck className="h-10 w-10 text-purple-600" />
+              </div>
+            </div>
+
+            <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600 mb-1">Horários Livres</p>
+                  <p className="text-3xl font-bold text-gray-900">{availableSlots}</p>
+                </div>
+                <Clock className="h-10 w-10 text-orange-600" />
+              </div>
+            </div>
+          </div>
+
+          {/* Filtro de Profissional */}
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6">
+            <div className="flex items-center gap-3">
+              <Filter className="h-5 w-5 text-gray-600" />
+              <select
+                value={selectedProfessional}
+                onChange={(e) => setSelectedProfessional(e.target.value)}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+              >
+                <option value="all">Todos os Profissionais</option>
+                {professionals.map((prof) => (
+                  <option key={prof.id} value={prof.id}>
+                    {prof.name} - {prof.specialty}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Lista de Horários */}
+          <div className="bg-white border border-gray-200 rounded-lg">
+            <div className="p-4 border-b border-gray-200 bg-gray-50">
+              <h2 className="text-lg font-semibold text-gray-900">
                 Horários do Dia
               </h2>
             </div>
 
-            <div className="p-6">
+            <div className="p-4">
               {loading ? (
-                <div className="text-center py-8">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-                  <p className="mt-2 text-gray-600 dark:text-gray-400">Carregando agenda...</p>
+                <div className="text-center py-12">
+                  <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-green-600 mx-auto"></div>
+                  <p className="mt-3 text-gray-600">Carregando agenda...</p>
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -253,50 +262,49 @@ export default function AgendaPage() {
                     return (
                       <div
                         key={time}
-                        className={`flex items-center justify-between p-4 rounded-lg border-2 transition-all cursor-pointer ${
+                        className={`flex items-center justify-between p-4 rounded-lg border transition-all cursor-pointer ${
                           appointment
-                            ? 'border-blue-200 bg-blue-50 dark:bg-blue-950 dark:border-blue-800'
-                            : 'border-gray-200 dark:border-gray-700 hover:border-emerald-300 dark:hover:border-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950'
+                            ? 'border-green-300 bg-green-50'
+                            : 'border-gray-200 hover:border-green-300 hover:bg-green-50'
                         }`}
                         onClick={() => !appointment && openAddModal(time)}
                       >
                         <div className="flex items-center gap-4 flex-1">
-                          <div className="flex items-center justify-center w-20 h-12 bg-gray-100 dark:bg-gray-800 rounded-lg">
-                            <span className="font-bold text-gray-900 dark:text-white">{time}</span>
+                          <div className="flex items-center justify-center w-20 h-12 bg-white border border-gray-200 rounded-lg">
+                            <span className="font-bold text-gray-900">{time}</span>
                           </div>
                           
                           {appointment ? (
                             <div className="flex-1">
-                              <div className="flex items-center gap-3">
-                                <div>
-                                  <p className="font-semibold text-gray-900 dark:text-white">
-                                    {appointment.patient?.name}
-                                  </p>
-                                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                                    {appointment.professional?.name} - {appointment.professional?.specialty}
-                                  </p>
-                                </div>
-                              </div>
+                              <p className="font-semibold text-gray-900">
+                                {appointment.patient?.name}
+                              </p>
+                              <p className="text-sm text-gray-600">
+                                {appointment.professional?.name} - {appointment.professional?.specialty}
+                              </p>
                             </div>
                           ) : (
                             <div className="flex-1">
-                              <p className="text-gray-500 dark:text-gray-400">Horário disponível</p>
-                              <p className="text-sm text-gray-400 dark:text-gray-500">Clique para agendar</p>
+                              <p className="text-gray-500">Livre</p>
+                              <p className="text-sm text-gray-400">Clique para agendar</p>
                             </div>
                           )}
                         </div>
 
                         <div>
                           {appointment ? (
-                            <span className={`px-3 py-1 text-sm rounded-full font-medium ${
+                            <span className={`px-4 py-1.5 text-sm rounded-full font-medium ${
                               appointment.status === 'scheduled'
-                                ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                                : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200'
+                                ? 'bg-green-100 text-green-700 border border-green-300'
+                                : appointment.status === 'attended'
+                                ? 'bg-blue-100 text-blue-700 border border-blue-300'
+                                : 'bg-gray-100 text-gray-700 border border-gray-300'
                             }`}>
-                              {appointment.status === 'scheduled' ? 'Agendado' : 'Cancelado'}
+                              {appointment.status === 'scheduled' ? 'Agendado' : 
+                               appointment.status === 'attended' ? 'Atendido' : 'Cancelado'}
                             </span>
                           ) : (
-                            <Plus className="h-6 w-6 text-emerald-600" />
+                            <Plus className="h-6 w-6 text-green-600" />
                           )}
                         </div>
                       </div>
@@ -306,19 +314,63 @@ export default function AgendaPage() {
               )}
             </div>
           </div>
+
+          {/* Histórico de Atendimentos */}
+          <div className="mt-6 bg-white border border-gray-200 rounded-lg">
+            <div className="p-4 border-b border-gray-200 bg-gray-50">
+              <h2 className="text-lg font-semibold text-gray-900">
+                Histórico de Atendimentos
+              </h2>
+            </div>
+            <div className="p-4">
+              {appointments.filter(app => app.status === 'attended').length === 0 ? (
+                <p className="text-center text-gray-500 py-8">
+                  Nenhum atendimento realizado hoje
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {appointments
+                    .filter(app => app.status === 'attended')
+                    .map((appointment) => (
+                      <div
+                        key={appointment.id}
+                        className="flex items-center justify-between p-4 rounded-lg border border-blue-200 bg-blue-50"
+                      >
+                        <div className="flex items-center gap-4">
+                          <div className="flex items-center justify-center w-20 h-12 bg-white border border-blue-200 rounded-lg">
+                            <span className="font-bold text-gray-900">{appointment.time}</span>
+                          </div>
+                          <div>
+                            <p className="font-semibold text-gray-900">
+                              {appointment.patient?.name}
+                            </p>
+                            <p className="text-sm text-gray-600">
+                              {appointment.professional?.name} - {appointment.professional?.specialty}
+                            </p>
+                          </div>
+                        </div>
+                        <span className="px-4 py-1.5 text-sm rounded-full font-medium bg-blue-100 text-blue-700 border border-blue-300">
+                          Atendido
+                        </span>
+                      </div>
+                    ))}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Modal de Adicionar Agendamento */}
         {showAddModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white dark:bg-gray-900 rounded-lg shadow-xl max-w-md w-full p-6">
+            <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-xl font-semibold text-gray-900 dark:text-white">
+                <h3 className="text-xl font-semibold text-gray-900">
                   Novo Agendamento - {selectedSlot}
                 </h3>
                 <button
                   onClick={() => setShowAddModal(false)}
-                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                  className="text-gray-400 hover:text-gray-600"
                 >
                   <X className="h-6 w-6" />
                 </button>
@@ -326,14 +378,14 @@ export default function AgendaPage() {
 
               <form onSubmit={handleAddAppointment} className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
                     Paciente *
                   </label>
                   <select
                     required
                     value={formData.patient_id}
                     onChange={(e) => setFormData({...formData, patient_id: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
                   >
                     <option value="">Selecione um paciente</option>
                     {patients.map((patient) => (
@@ -345,14 +397,14 @@ export default function AgendaPage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
                     Profissional *
                   </label>
                   <select
                     required
                     value={formData.professional_id}
                     onChange={(e) => setFormData({...formData, professional_id: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
                   >
                     <option value="">Selecione um profissional</option>
                     {professionals.map((prof) => (
@@ -367,13 +419,13 @@ export default function AgendaPage() {
                   <button
                     type="button"
                     onClick={() => setShowAddModal(false)}
-                    className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
                   >
                     Cancelar
                   </button>
                   <button
                     type="submit"
-                    className="flex-1 px-4 py-2 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 transition-colors"
+                    className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
                   >
                     Agendar
                   </button>

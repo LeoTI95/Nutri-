@@ -3,7 +3,6 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
-import { Navbar } from "@/components/custom/navbar";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -16,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Nutri+ | Seu App de Nutrição Inteligente",
-  description: "Acompanhe suas métricas nutricionais, exercícios e receba dicas personalizadas com IA",
+  title: "ClinicAgenda | Sistema de Agendamento de Consultas",
+  description: "Sistema completo de agendamento para clínicas médicas, odontológicas e consultórios",
 };
 
 export default function RootLayout({
@@ -33,7 +32,6 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-gray-50 dark:bg-gray-950`}
       >
-        <Navbar />
         <main className="min-h-screen">
           {children}
         </main>

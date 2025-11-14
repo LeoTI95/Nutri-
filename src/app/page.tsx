@@ -39,8 +39,13 @@ export default function LoginPage() {
       }
 
       if (data.user) {
-        // Login bem-sucedido - redireciona para agenda
+        // Login bem-sucedido - aguarda a sessão ser estabelecida
+        // Pequeno delay para garantir que a sessão foi salva
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        // Redireciona usando router.push para navegação SPA
         router.push('/agenda');
+        router.refresh(); // Força refresh para atualizar o estado de autenticação
       }
     } catch (err) {
       setError('Erro ao conectar com o servidor. Tente novamente.');

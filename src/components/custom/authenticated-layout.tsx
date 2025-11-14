@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { Calendar, Users, History, Settings, UserCog, LogOut } from 'lucide-react';
@@ -9,17 +9,25 @@ import { supabase } from '@/lib/supabase';
 export function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
 
   useEffect(() => {
     checkAuth();
   }, []);
 
   const checkAuth = async () => {
-    if (!supabase) return;
+    if (!supabase) {
+      setIsAuthenticated(true); // Se não tem Supabase configurado, permite acesso
+      return;
+    }
     
     const { data: { session } } = await supabase.auth.getSession();
+    
     if (!session) {
       router.push('/');
+      setIsAuthenticated(false);
+    } else {
+      setIsAuthenticated(true);
     }
   };
 
@@ -29,6 +37,23 @@ export function AuthenticatedLayout({ children }: { children: React.ReactNode })
     await supabase.auth.signOut();
     router.push('/');
   };
+
+  // Mostra loading enquanto verifica autenticação
+  if (isAuthenticated === null) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto mb-4"></div>
+          <p className="text-gray-600 dark:text-gray-400">Verificando autenticação...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Se não está autenticado, não renderiza nada (já está redirecionando)
+  if (!isAuthenticated) {
+    return null;
+  }
 
   const navItems = [
     { href: '/agenda', label: 'Agenda', icon: Calendar },

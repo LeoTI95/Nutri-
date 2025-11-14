@@ -9,7 +9,6 @@ import { AuthenticatedLayout } from '@/components/custom/authenticated-layout';
 import { AuthenticatedLayout } from '@/components/custom/authenticated-layout';
 import { AuthenticatedLayout } from '@/components/custom/authenticated-layout';
 import { AuthenticatedLayout } from '@/components/custom/authenticated-layout';
-import { AuthenticatedLayout } from '@/components/custom/authenticated-layout';
 
 interface Patient {
   id: string;

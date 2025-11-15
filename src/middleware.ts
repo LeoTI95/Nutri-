@@ -4,26 +4,17 @@ import type { NextRequest } from 'next/server';
 export async function middleware(req: NextRequest) {
   const res = NextResponse.next();
   
-  // Verificar se tem token de autenticação nos cookies
-  const supabaseToken = req.cookies.get('sb-access-token')?.value || 
-                        req.cookies.get('supabase-auth-token')?.value;
-
   // Rotas públicas que não precisam de autenticação
-  const publicRoutes = ['/auth/login', '/auth/signup'];
-  const isPublicRoute = publicRoutes.some(route => req.nextUrl.pathname.startsWith(route));
+  const publicRoutes = ['/auth/login', '/auth/signup', '/'];
+  const isPublicRoute = publicRoutes.some(route => req.nextUrl.pathname === route);
 
-  // Se não está logado e tentando acessar rota protegida
-  if (!supabaseToken && !isPublicRoute) {
-    const redirectUrl = new URL('/auth/login', req.url);
-    return NextResponse.redirect(redirectUrl);
+  // Permitir acesso a rotas públicas
+  if (isPublicRoute) {
+    return res;
   }
 
-  // Se está logado e tentando acessar página de login/signup
-  if (supabaseToken && isPublicRoute) {
-    const redirectUrl = new URL('/', req.url);
-    return NextResponse.redirect(redirectUrl);
-  }
-
+  // Para rotas protegidas, deixar a verificação para o lado do cliente
+  // O dashboard já verifica localStorage e redireciona se necessário
   return res;
 }
 

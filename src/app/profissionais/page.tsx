@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, Search, Stethoscope } from 'lucide-react';
+import { Plus, Search, Stethoscope, Edit2, Trash2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 interface Professional {
@@ -19,6 +19,7 @@ export default function ProfessionalsPage() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [showForm, setShowForm] = useState(false);
+  const [editingProfessional, setEditingProfessional] = useState<Professional | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     specialty: '',
@@ -47,17 +48,35 @@ export default function ProfessionalsPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    const { error } = await supabase
-      .from('professionals')
-      .insert([formData]);
+    if (editingProfessional) {
+      // Atualizar profissional existente
+      const { error } = await supabase
+        .from('professionals')
+        .update(formData)
+        .eq('id', editingProfessional.id);
 
-    if (error) {
-      alert('Erro ao cadastrar profissional: ' + error.message);
-      return;
+      if (error) {
+        alert('Erro ao atualizar profissional: ' + error.message);
+        return;
+      }
+
+      alert('Profissional atualizado com sucesso!');
+    } else {
+      // Criar novo profissional
+      const { error } = await supabase
+        .from('professionals')
+        .insert([formData]);
+
+      if (error) {
+        alert('Erro ao cadastrar profissional: ' + error.message);
+        return;
+      }
+
+      alert('Profissional cadastrado com sucesso!');
     }
 
-    alert('Profissional cadastrado com sucesso!');
     setShowForm(false);
+    setEditingProfessional(null);
     setFormData({
       name: '',
       specialty: '',
@@ -66,6 +85,49 @@ export default function ProfessionalsPage() {
       crm_crn: '',
     });
     loadProfessionals();
+  };
+
+  const handleEdit = (professional: Professional) => {
+    setEditingProfessional(professional);
+    setFormData({
+      name: professional.name,
+      specialty: professional.specialty,
+      email: professional.email,
+      phone: professional.phone,
+      crm_crn: professional.crm_crn,
+    });
+    setShowForm(true);
+  };
+
+  const handleDelete = async (professional: Professional) => {
+    if (!confirm(`Tem certeza que deseja excluir o profissional ${professional.name}?`)) {
+      return;
+    }
+
+    const { error } = await supabase
+      .from('professionals')
+      .delete()
+      .eq('id', professional.id);
+
+    if (error) {
+      alert('Erro ao excluir profissional: ' + error.message);
+      return;
+    }
+
+    alert('Profissional excluído com sucesso!');
+    loadProfessionals();
+  };
+
+  const handleCancelForm = () => {
+    setShowForm(false);
+    setEditingProfessional(null);
+    setFormData({
+      name: '',
+      specialty: '',
+      email: '',
+      phone: '',
+      crm_crn: '',
+    });
   };
 
   const filteredProfessionals = professionals.filter(prof =>
@@ -111,7 +173,7 @@ export default function ProfessionalsPage() {
         {showForm && (
           <div className="bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-200 dark:border-gray-800 p-6 mb-6">
             <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
-              Cadastrar Novo Profissional
+              {editingProfessional ? 'Editar Profissional' : 'Cadastrar Novo Profissional'}
             </h2>
             <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
@@ -192,11 +254,11 @@ export default function ProfessionalsPage() {
                   type="submit"
                   className="px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors"
                 >
-                  Cadastrar Profissional
+                  {editingProfessional ? 'Atualizar Profissional' : 'Cadastrar Profissional'}
                 </button>
                 <button
                   type="button"
-                  onClick={() => setShowForm(false)}
+                  onClick={handleCancelForm}
                   className="px-6 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-lg transition-colors"
                 >
                   Cancelar
@@ -251,10 +313,27 @@ export default function ProfessionalsPage() {
                       </div>
                     </div>
                     
-                    <div className="space-y-1 text-sm text-gray-600 dark:text-gray-400">
+                    <div className="space-y-1 text-sm text-gray-600 dark:text-gray-400 mb-4">
                       <p>{prof.email}</p>
                       <p>{prof.phone}</p>
                       <p className="font-medium">{prof.crm_crn}</p>
+                    </div>
+
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleEdit(prof)}
+                        className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                      >
+                        <Edit2 className="h-4 w-4" />
+                        Editar
+                      </button>
+                      <button
+                        onClick={() => handleDelete(prof)}
+                        className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        Excluir
+                      </button>
                     </div>
                   </div>
                 ))}

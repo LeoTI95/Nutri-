@@ -8,7 +8,7 @@ export function Navbar() {
   const pathname = usePathname();
 
   const navItems = [
-    { href: '/', label: 'Agenda', icon: Calendar },
+    { href: '/', label: 'Agendamento', icon: Calendar },
     { href: '/pacientes', label: 'Pacientes', icon: Users },
     { href: '/system-users', label: 'Usuários', icon: UserCog },
     { href: '/historico', label: 'Histórico', icon: History },

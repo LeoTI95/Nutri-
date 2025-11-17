@@ -1,255 +1,290 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { FileText, Calendar, Clock, User, ArrowLeft, Filter, Search } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { Calendar, Users, Clock } from 'lucide-react';
-import { AuthenticatedLayout } from '@/components/custom/authenticated-layout';
+import { useRouter } from 'next/navigation';
+
+interface Patient {
+  id: string;
+  name: string;
+}
+
+interface UserData {
+  id: string;
+  nome: string;
+}
 
 interface Appointment {
   id: string;
   date: string;
   time: string;
+  patient_id: string;
+  professional_id: string;
   status: string;
-  professional: {
-    id: string;
-    name: string;
-    specialty: string;
-  };
-  patient: {
-    id: string;
-    name: string;
-  };
+  duration: number;
+  notes?: string;
 }
 
+interface AppointmentWithDetails extends Appointment {
+  patient: Patient | null;
+  user: UserData | null;
+}
+
+const STATUS_OPTIONS = [
+  { value: 'all', label: 'Todos os Status', color: 'bg-gray-100 text-gray-700' },
+  { value: 'scheduled', label: 'Não Confirmado', color: 'bg-yellow-100 text-yellow-700' },
+  { value: 'confirmed', label: 'Confirmado', color: 'bg-green-100 text-green-700' },
+  { value: 'waiting', label: 'Paciente Aguardando', color: 'bg-blue-100 text-blue-700' },
+  { value: 'no_show', label: 'Paciente Não Chegou', color: 'bg-red-100 text-red-700' },
+  { value: 'completed', label: 'Atendimento Concluído', color: 'bg-purple-100 text-purple-700' }
+];
+
 export default function HistoricoPage() {
-  const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [selectedPeriod, setSelectedPeriod] = useState<'day' | 'week' | 'month'>('day');
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const router = useRouter();
+  const [appointments, setAppointments] = useState<AppointmentWithDetails[]>([]);
+  const [filteredAppointments, setFilteredAppointments] = useState<AppointmentWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
-    loadAppointments();
-  }, [selectedPeriod, selectedDate]);
+    loadAllAppointments();
+  }, []);
 
-  const loadAppointments = async () => {
+  useEffect(() => {
+    applyFilters();
+  }, [appointments, filterStatus, searchTerm]);
+
+  const loadAllAppointments = async () => {
+    if (!supabase) {
+      console.error('❌ Cliente Supabase não disponível');
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
+    
+    try {
+      // Carregar pacientes
+      const { data: patientsData, error: patientsError } = await supabase
+        .from('patients')
+        .select('id, name');
 
-    let startDate: string;
-    let endDate: string;
+      if (patientsError) {
+        console.error('Erro ao carregar pacientes:', patientsError);
+      }
 
-    const date = new Date(selectedDate);
+      // Carregar usuários
+      const { data: usersData, error: usersError } = await supabase
+        .from('usuarios')
+        .select('id, nome');
 
-    if (selectedPeriod === 'day') {
-      startDate = selectedDate;
-      endDate = selectedDate;
-    } else if (selectedPeriod === 'week') {
-      const startOfWeek = new Date(date);
-      startOfWeek.setDate(date.getDate() - date.getDay());
-      startDate = startOfWeek.toISOString().split('T')[0];
+      if (usersError) {
+        console.error('Erro ao carregar usuários:', usersError);
+      }
 
-      const endOfWeek = new Date(startOfWeek);
-      endOfWeek.setDate(startOfWeek.getDate() + 6);
-      endDate = endOfWeek.toISOString().split('T')[0];
-    } else {
-      startDate = new Date(date.getFullYear(), date.getMonth(), 1).toISOString().split('T')[0];
-      endDate = new Date(date.getFullYear(), date.getMonth() + 1, 0).toISOString().split('T')[0];
+      // Criar mapas para busca rápida
+      const patientsMap = new Map<string, Patient>();
+      patientsData?.forEach(p => patientsMap.set(p.id, p));
+
+      const usersMap = new Map<string, UserData>();
+      usersData?.forEach(u => usersMap.set(u.id, u));
+
+      // Carregar TODOS os agendamentos (ordenados do mais recente para o mais antigo)
+      const { data: appointmentsData, error: appointmentsError } = await supabase
+        .from('appointments')
+        .select('id, date, time, patient_id, professional_id, status, duration, notes')
+        .order('date', { ascending: false })
+        .order('time', { ascending: false });
+
+      if (appointmentsError) {
+        console.error('Erro ao carregar histórico:', appointmentsError);
+      } else if (appointmentsData) {
+        const appointmentsWithDetails: AppointmentWithDetails[] = appointmentsData.map(apt => ({
+          ...apt,
+          patient: patientsMap.get(apt.patient_id) || null,
+          user: usersMap.get(apt.professional_id) || null
+        }));
+
+        setAppointments(appointmentsWithDetails);
+      }
+    } catch (error) {
+      console.error('Erro ao carregar dados:', error);
+    } finally {
+      setLoading(false);
     }
-
-    const { data, error } = await supabase
-      .from('appointments')
-      .select(`
-        id, date, time, status,
-        professional:professionals(id, name, specialty),
-        patient:patients(id, name)
-      `)
-      .gte('date', startDate)
-      .lte('date', endDate)
-      .order('date', { ascending: false })
-      .order('time', { ascending: false });
-
-    if (!error && data) {
-      setAppointments(data);
-    }
-    setLoading(false);
   };
 
-  const getPeriodLabel = () => {
-    const date = new Date(selectedDate);
-    if (selectedPeriod === 'day') {
-      return date.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-    } else if (selectedPeriod === 'week') {
-      const startOfWeek = new Date(date);
-      startOfWeek.setDate(date.getDate() - date.getDay());
-      const endOfWeek = new Date(startOfWeek);
-      endOfWeek.setDate(startOfWeek.getDate() + 6);
-      return `${startOfWeek.toLocaleDateString('pt-BR')} - ${endOfWeek.toLocaleDateString('pt-BR')}`;
-    } else {
-      return date.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+  const applyFilters = () => {
+    let filtered = [...appointments];
+
+    // Filtro por status
+    if (filterStatus !== 'all') {
+      filtered = filtered.filter(apt => apt.status === filterStatus);
     }
+
+    // Filtro por busca (nome do paciente ou usuário)
+    if (searchTerm.trim()) {
+      const search = searchTerm.toLowerCase();
+      filtered = filtered.filter(apt => 
+        apt.patient?.name.toLowerCase().includes(search) ||
+        apt.user?.nome.toLowerCase().includes(search)
+      );
+    }
+
+    setFilteredAppointments(filtered);
+  };
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString + 'T00:00:00');
+    return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  };
+
+  const formatTime = (timeString: string) => {
+    return timeString.substring(0, 5);
+  };
+
+  const getStatusLabel = (status: string) => {
+    const statusOption = STATUS_OPTIONS.find(opt => opt.value === status);
+    return statusOption?.label || status;
+  };
+
+  const getStatusColor = (status: string) => {
+    const statusOption = STATUS_OPTIONS.find(opt => opt.value === status);
+    return statusOption?.color || 'bg-gray-100 text-gray-700';
   };
 
   return (
-    <AuthenticatedLayout>
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-950 p-6">
-        <div className="max-w-7xl mx-auto">
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-              Histórico de Atendimentos
-            </h1>
-            <p className="text-gray-600 dark:text-gray-400">
-              Acompanhe os atendimentos realizados
-            </p>
-          </div>
-
-          <div className="mb-6 p-6 bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-200 dark:border-gray-800">
-            <div className="flex flex-wrap gap-4 items-center justify-between">
-              <div className="flex gap-3">
-                <select
-                  value={selectedPeriod}
-                  onChange={(e) => setSelectedPeriod(e.target.value as any)}
-                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                >
-                  <option value="day">Dia</option>
-                  <option value="week">Semana</option>
-                  <option value="month">Mês</option>
-                </select>
-                <input
-                  type="date"
-                  value={selectedDate}
-                  onChange={(e) => setSelectedDate(e.target.value)}
-                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                />
-              </div>
-              <div className="text-sm text-gray-600 dark:text-gray-400">
-                {getPeriodLabel()}
-              </div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 dark:from-gray-950 dark:via-slate-900 dark:to-gray-950 p-4 sm:p-6 lg:p-8">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => router.push('/dashboard')}
+              className="p-2 hover:bg-white dark:hover:bg-gray-800 rounded-lg transition-colors"
+            >
+              <ArrowLeft className="h-6 w-6 text-gray-600 dark:text-gray-400" />
+            </button>
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent mb-1">
+                Histórico Completo de Agendamentos
+              </h1>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Visualize todos os agendamentos realizados no sistema
+              </p>
             </div>
+          </div>
+        </div>
+
+        {/* Filtros */}
+        <div className="bg-white dark:bg-gray-900 rounded-xl shadow-lg border border-gray-200 dark:border-gray-800 p-4 mb-6">
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Buscar por paciente ou usuário..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-purple-500"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <Filter className="h-5 w-5 text-gray-600 dark:text-gray-400 flex-shrink-0" />
+              <select
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value)}
+                className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-purple-500"
+              >
+                {STATUS_OPTIONS.map((status) => (
+                  <option key={status.value} value={status.value}>
+                    {status.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {/* Lista de Agendamentos */}
+        <div className="bg-white dark:bg-gray-900 rounded-xl shadow-lg border border-gray-200 dark:border-gray-800 p-4 sm:p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+              <FileText className="h-5 w-5 text-purple-600" />
+              {filteredAppointments.length} {filteredAppointments.length === 1 ? 'Agendamento' : 'Agendamentos'}
+            </h2>
           </div>
 
           {loading ? (
             <div className="text-center py-12">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto"></div>
               <p className="mt-4 text-gray-600 dark:text-gray-400">Carregando histórico...</p>
             </div>
-          ) : appointments.length === 0 ? (
-            <div className="p-12 text-center bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-200 dark:border-gray-800">
-              <Calendar className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                Nenhum atendimento encontrado
-              </h3>
-              <p className="text-gray-600 dark:text-gray-400">
-                Não há atendimentos registrados para o período selecionado.
+          ) : filteredAppointments.length === 0 ? (
+            <div className="text-center py-12">
+              <FileText className="h-16 w-16 text-gray-300 dark:text-gray-700 mx-auto mb-4" />
+              <p className="text-gray-500 dark:text-gray-400 text-lg mb-2">
+                Nenhum agendamento encontrado
+              </p>
+              <p className="text-gray-400 dark:text-gray-500 text-sm">
+                {searchTerm || filterStatus !== 'all' 
+                  ? 'Tente ajustar os filtros de busca'
+                  : 'Ainda não há agendamentos registrados no sistema'}
               </p>
             </div>
           ) : (
-            <div className="space-y-4">
-              {appointments.map((appointment) => (
+            <div className="space-y-3">
+              {filteredAppointments.map((appointment) => (
                 <div
                   key={appointment.id}
-                  className="p-6 bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-200 dark:border-gray-800 hover:shadow-md transition-shadow"
+                  className="flex flex-col gap-3 p-4 bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-950 dark:to-pink-950 rounded-lg border border-purple-200 dark:border-purple-800 hover:shadow-md transition-shadow"
                 >
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-cyan-600 rounded-lg flex items-center justify-center">
-                        <Users className="w-6 h-6 text-white" />
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                    <div className="flex items-start gap-3 flex-1 min-w-0">
+                      <div className="w-12 h-12 rounded-lg bg-purple-100 dark:bg-purple-900 flex items-center justify-center flex-shrink-0">
+                        <Calendar className="h-6 w-6 text-purple-600 dark:text-purple-400" />
                       </div>
-                      <div>
-                        <h3 className="text-lg font-bold text-gray-900 dark:text-white">
-                          {appointment.patient.name}
-                        </h3>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
-                          {appointment.professional.name} • {appointment.professional.specialty}
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-gray-900 dark:text-white text-base truncate">
+                          {appointment.patient?.name || 'Paciente não encontrado'}
                         </p>
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 text-sm text-gray-600 dark:text-gray-400 mt-1">
+                          <div className="flex items-center gap-1">
+                            <Calendar className="h-4 w-4" />
+                            <span>{formatDate(appointment.date)}</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <Clock className="h-4 w-4" />
+                            <span>{formatTime(appointment.time)}</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <User className="h-4 w-4" />
+                            <span className="truncate">
+                              {appointment.user?.nome || 'Usuário não encontrado'}
+                            </span>
+                          </div>
+                        </div>
+                        {appointment.notes && (
+                          <p className="text-xs text-gray-500 dark:text-gray-500 mt-2 line-clamp-2">
+                            {appointment.notes}
+                          </p>
+                        )}
                       </div>
                     </div>
-                    <div className="text-right">
-                      <p className="text-sm font-medium text-gray-900 dark:text-white">
-                        {new Date(appointment.date).toLocaleDateString('pt-BR')}
-                      </p>
-                      <p className="text-xs text-gray-600 dark:text-gray-400">
-                        {appointment.time}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="p-4 bg-emerald-50 dark:bg-emerald-950 rounded-lg">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Clock className="w-4 h-4 text-emerald-600" />
-                        <p className="text-xs font-medium text-gray-600 dark:text-gray-400">
-                          Horário
-                        </p>
-                      </div>
-                      <p className="text-lg font-bold text-gray-900 dark:text-white">
-                        {appointment.time}
-                      </p>
-                    </div>
-
-                    <div className="p-4 bg-blue-50 dark:bg-blue-950 rounded-lg">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Users className="w-4 h-4 text-blue-600" />
-                        <p className="text-xs font-medium text-gray-600 dark:text-gray-400">
-                          Profissional
-                        </p>
-                      </div>
-                      <p className="text-lg font-bold text-gray-900 dark:text-white">
-                        {appointment.professional.name}
-                      </p>
-                      <p className="text-xs text-gray-600 dark:text-gray-400">
-                        {appointment.professional.specialty}
-                      </p>
-                    </div>
-
-                    <div className="p-4 bg-purple-50 dark:bg-purple-950 rounded-lg">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Calendar className="w-4 h-4 text-purple-600" />
-                        <p className="text-xs font-medium text-gray-600 dark:text-gray-400">
-                          Status
-                        </p>
-                      </div>
-                      <p className="text-lg font-bold text-gray-900 dark:text-white">
-                        {appointment.status === 'scheduled' ? 'Agendado' : 'Cancelado'}
-                      </p>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <span className={`px-3 py-1 text-xs rounded-full font-medium whitespace-nowrap ${getStatusColor(appointment.status)}`}>
+                        {getStatusLabel(appointment.status)}
+                      </span>
                     </div>
                   </div>
                 </div>
               ))}
             </div>
           )}
-
-          {!loading && appointments.length > 0 && (
-            <div className="mt-8 p-6 bg-gradient-to-r from-blue-500 to-cyan-600 rounded-lg shadow-lg">
-              <h3 className="text-xl font-bold text-white mb-4">Resumo do Período</h3>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div>
-                  <p className="text-blue-100 text-sm mb-1">Total de Atendimentos</p>
-                  <p className="text-3xl font-bold text-white">{appointments.length}</p>
-                </div>
-                <div>
-                  <p className="text-blue-100 text-sm mb-1">Profissionais</p>
-                  <p className="text-3xl font-bold text-white">
-                    {new Set(appointments.map(a => a.professional.id)).size}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-blue-100 text-sm mb-1">Pacientes Atendidos</p>
-                  <p className="text-3xl font-bold text-white">
-                    {new Set(appointments.map(a => a.patient.id)).size}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-blue-100 text-sm mb-1">Média por Dia</p>
-                  <p className="text-3xl font-bold text-white">
-                    {selectedPeriod === 'day' ? appointments.length :
-                     selectedPeriod === 'week' ? Math.round(appointments.length / 7) :
-                     Math.round(appointments.length / 30)}
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       </div>
-    </AuthenticatedLayout>
+    </div>
   );
 }

@@ -759,11 +759,18 @@ export default function DashboardPage() {
 
           {/* Histórico Recente */}
           <div className="bg-white dark:bg-gray-900 rounded-xl shadow-lg border border-gray-200 dark:border-gray-800">
-            <div className="p-4 sm:p-6 border-b border-gray-200 dark:border-gray-800">
+            <div className="p-4 sm:p-6 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
               <h2 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white flex items-center gap-2">
                 <FileText className="h-5 w-5 text-purple-600 dark:text-purple-400" />
                 Histórico Recente
               </h2>
+              <button
+                onClick={() => router.push('/historico')}
+                className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-xs rounded-lg transition-colors shadow-md flex items-center gap-1.5"
+              >
+                <FileText className="h-3.5 w-3.5" />
+                Ver Tudo
+              </button>
             </div>
             <div className="p-4 sm:p-6">
               {!supabaseConfigured ? (

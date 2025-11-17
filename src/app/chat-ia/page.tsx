@@ -16,7 +16,7 @@ export default function ChatIAPage() {
     {
       id: '1',
       role: 'assistant',
-      content: 'Olá! Sou seu assistente virtual de saúde. Estou aqui para ajudar com dúvidas sobre atendimento, acompanhamento de pacientes e orientações gerais. Como posso ajudar você hoje?',
+      content: 'Olá! Sou seu assistente virtual de nutrição e saúde. Estou aqui para ajudar com dúvidas sobre alimentação saudável, nutrição, dietas, suplementação e orientações gerais de saúde. Como posso ajudar você hoje?',
       timestamp: new Date()
     }
   ]);
@@ -63,6 +63,60 @@ export default function ChatIAPage() {
   const getSimulatedResponse = (question: string): string => {
     const lowerQuestion = question.toLowerCase();
     
+    // PERGUNTAS NUTRICIONAIS
+    if (lowerQuestion.includes('proteína') || lowerQuestion.includes('proteina')) {
+      return '🥩 **Sobre Proteínas:**\n\nAs proteínas são essenciais para:\n• Construção e reparação muscular\n• Fortalecimento do sistema imunológico\n• Produção de enzimas e hormônios\n\n**Fontes de proteína:**\n✅ Animais: Carnes magras, peixes, ovos, laticínios\n✅ Vegetais: Feijão, lentilha, grão-de-bico, tofu, quinoa\n\n**Recomendação:** 0,8-1,2g por kg de peso corporal/dia para adultos.\n\nPrecisa de orientação personalizada? Consulte um nutricionista!';
+    }
+
+    if (lowerQuestion.includes('carboidrato') || lowerQuestion.includes('carboidratos')) {
+      return '🍞 **Sobre Carboidratos:**\n\nOs carboidratos são a principal fonte de energia do corpo!\n\n**Carboidratos Complexos (preferir):**\n✅ Arroz integral, aveia, batata-doce\n✅ Pães integrais, quinoa, massas integrais\n✅ Frutas, legumes, verduras\n\n**Carboidratos Simples (moderar):**\n⚠️ Açúcar refinado, doces, refrigerantes\n⚠️ Pães brancos, massas refinadas\n\n**Dica:** Priorize carboidratos integrais e combine com proteínas para melhor saciedade!';
+    }
+
+    if (lowerQuestion.includes('gordura') || lowerQuestion.includes('lipídio') || lowerQuestion.includes('lipidio')) {
+      return '🥑 **Sobre Gorduras:**\n\nNem toda gordura é vilã! Existem gorduras saudáveis essenciais.\n\n**Gorduras Boas (consumir):**\n✅ Abacate, azeite de oliva, castanhas\n✅ Peixes (salmão, sardinha) - ômega 3\n✅ Sementes (chia, linhaça)\n\n**Gorduras Ruins (evitar):**\n❌ Gordura trans (alimentos industrializados)\n❌ Excesso de gordura saturada\n❌ Frituras em óleo reutilizado\n\n**Benefícios:** Saúde cardiovascular, absorção de vitaminas, saciedade!';
+    }
+
+    if (lowerQuestion.includes('vitamina') || lowerQuestion.includes('mineral')) {
+      return '💊 **Sobre Vitaminas e Minerais:**\n\nMicronutrientes essenciais para o funcionamento do corpo!\n\n**Principais vitaminas:**\n• Vitamina A: Cenoura, abóbora (visão)\n• Vitamina C: Laranja, limão (imunidade)\n• Vitamina D: Sol, peixes (ossos)\n• Vitamina E: Castanhas (antioxidante)\n• Vitaminas do complexo B: Grãos integrais (energia)\n\n**Principais minerais:**\n• Ferro: Carnes, feijão (sangue)\n• Cálcio: Laticínios, vegetais verdes (ossos)\n• Zinco: Carnes, sementes (imunidade)\n• Magnésio: Banana, aveia (músculos)\n\n**Dica:** Alimentação variada = nutrientes completos!';
+    }
+
+    if (lowerQuestion.includes('emagrecer') || lowerQuestion.includes('perder peso') || lowerQuestion.includes('dieta')) {
+      return '⚖️ **Sobre Emagrecimento Saudável:**\n\n**Princípios fundamentais:**\n1. Déficit calórico moderado (não radical!)\n2. Alimentação balanceada e variada\n3. Exercícios físicos regulares\n4. Hidratação adequada (2-3L água/dia)\n5. Sono de qualidade (7-9h/noite)\n\n**Evite:**\n❌ Dietas restritivas extremas\n❌ Pular refeições\n❌ Produtos "milagrosos"\n\n**Recomendação:** Perda saudável = 0,5-1kg por semana.\n\n⚠️ **IMPORTANTE:** Consulte um nutricionista para plano personalizado!';
+    }
+
+    if (lowerQuestion.includes('ganhar peso') || lowerQuestion.includes('massa muscular') || lowerQuestion.includes('hipertrofia')) {
+      return '💪 **Sobre Ganho de Massa Muscular:**\n\n**Estratégias nutricionais:**\n1. Superávit calórico moderado (+300-500 kcal/dia)\n2. Proteína adequada (1,6-2,2g/kg peso)\n3. Carboidratos suficientes (energia treino)\n4. Refeições frequentes (5-6x/dia)\n5. Hidratação constante\n\n**Alimentos estratégicos:**\n✅ Frango, peixe, carne vermelha magra\n✅ Ovos, laticínios\n✅ Arroz, batata-doce, aveia\n✅ Oleaginosas, abacate\n\n**Essencial:** Treino de força + nutrição + descanso!\n\nConsulte nutricionista esportivo para plano personalizado!';
+    }
+
+    if (lowerQuestion.includes('água') || lowerQuestion.includes('hidratação') || lowerQuestion.includes('hidratar')) {
+      return '💧 **Sobre Hidratação:**\n\nA água é essencial para TODAS as funções do corpo!\n\n**Benefícios da hidratação:**\n✅ Regula temperatura corporal\n✅ Transporta nutrientes\n✅ Elimina toxinas\n✅ Melhora digestão\n✅ Mantém pele saudável\n✅ Aumenta energia e concentração\n\n**Quanto beber?**\n• Mínimo: 2 litros/dia\n• Ideal: 30-35ml por kg de peso\n• Mais em dias quentes ou treinos\n\n**Sinais de desidratação:**\n⚠️ Urina escura, sede intensa, fadiga, dor de cabeça\n\n**Dica:** Beba água ao longo do dia, não espere ter sede!';
+    }
+
+    if (lowerQuestion.includes('suplemento') || lowerQuestion.includes('suplementação') || lowerQuestion.includes('whey')) {
+      return '💊 **Sobre Suplementação:**\n\n**Quando considerar suplementos:**\n• Deficiências nutricionais comprovadas\n• Dificuldade em atingir necessidades pela dieta\n• Objetivos esportivos específicos\n• Orientação de nutricionista/médico\n\n**Suplementos comuns:**\n• Whey Protein: Complemento proteico\n• Creatina: Performance e força\n• Ômega 3: Saúde cardiovascular\n• Vitamina D: Imunidade e ossos\n• Multivitamínico: Prevenção de carências\n\n⚠️ **IMPORTANTE:**\n❌ Suplementos NÃO substituem alimentação\n❌ Sempre consulte profissional antes\n❌ Cuidado com produtos sem registro\n\n**Prioridade:** Alimentação real e balanceada!';
+    }
+
+    if (lowerQuestion.includes('diabetes') || lowerQuestion.includes('diabético') || lowerQuestion.includes('diabetico') || lowerQuestion.includes('açúcar') || lowerQuestion.includes('acucar')) {
+      return '🩺 **Sobre Diabetes e Controle Glicêmico:**\n\n**Alimentação para diabéticos:**\n✅ Carboidratos complexos e integrais\n✅ Fibras (legumes, verduras, frutas)\n✅ Proteínas magras\n✅ Gorduras boas\n✅ Refeições regulares (evitar jejum prolongado)\n\n**Evitar/Moderar:**\n❌ Açúcar refinado e doces\n❌ Carboidratos simples (pão branco, massas)\n❌ Bebidas açucaradas\n❌ Alimentos ultraprocessados\n\n**Dicas importantes:**\n• Monitore glicemia regularmente\n• Pratique exercícios físicos\n• Mantenha peso saudável\n• Hidrate-se bem\n\n⚠️ **ESSENCIAL:** Acompanhamento com endocrinologista e nutricionista!';
+    }
+
+    if (lowerQuestion.includes('vegetariano') || lowerQuestion.includes('vegano') || lowerQuestion.includes('vegetariana')) {
+      return '🌱 **Sobre Dieta Vegetariana/Vegana:**\n\n**Nutrientes que requerem atenção:**\n• Proteína: Leguminosas, tofu, tempeh, quinoa\n• Ferro: Feijão, lentilha, espinafre + vitamina C\n• B12: Suplementação obrigatória!\n• Cálcio: Vegetais verdes, tofu, leites vegetais fortificados\n• Ômega 3: Chia, linhaça, nozes\n• Zinco: Sementes, grãos integrais\n\n**Combinações inteligentes:**\n✅ Arroz + feijão (proteína completa)\n✅ Ferro vegetal + vitamina C (melhor absorção)\n✅ Variedade de cores no prato\n\n**Importante:** Consulte nutricionista para plano adequado e suplementação correta!';
+    }
+
+    if (lowerQuestion.includes('colesterol') || lowerQuestion.includes('triglicérides') || lowerQuestion.includes('triglicerides')) {
+      return '❤️ **Sobre Colesterol e Triglicérides:**\n\n**Para reduzir colesterol ruim (LDL):**\n✅ Fibras: Aveia, frutas, legumes\n✅ Gorduras boas: Azeite, abacate, peixes\n✅ Oleaginosas: Castanhas, nozes, amêndoas\n✅ Alho, cebola, gengibre\n\n**Para reduzir triglicérides:**\n✅ Reduzir açúcar e carboidratos simples\n✅ Aumentar ômega 3 (peixes)\n✅ Evitar álcool\n✅ Controlar peso\n\n**Evitar:**\n❌ Gordura trans e saturada em excesso\n❌ Frituras\n❌ Alimentos ultraprocessados\n❌ Excesso de açúcar\n\n**Essencial:** Exercícios + alimentação + acompanhamento médico!';
+    }
+
+    if (lowerQuestion.includes('intestino') || lowerQuestion.includes('prisão de ventre') || lowerQuestion.includes('constipação') || lowerQuestion.includes('digestão')) {
+      return '🌾 **Sobre Saúde Intestinal:**\n\n**Para melhorar o intestino:**\n✅ Fibras: Frutas, verduras, legumes, grãos integrais\n✅ Probióticos: Iogurte natural, kefir, kombucha\n✅ Prebióticos: Banana, alho, cebola, aveia\n✅ Água: 2-3 litros/dia\n✅ Exercícios físicos regulares\n\n**Alimentos ricos em fibras:**\n• Mamão, ameixa, laranja com bagaço\n• Aveia, linhaça, chia\n• Feijão, lentilha, grão-de-bico\n• Brócolis, couve, espinafre\n\n**Evitar:**\n❌ Alimentos muito processados\n❌ Excesso de carne vermelha\n❌ Baixa ingestão de água\n\n**Dica:** Mastigue bem e coma devagar!';
+    }
+
+    if (lowerQuestion.includes('café da manhã') || lowerQuestion.includes('desjejum')) {
+      return '🌅 **Sobre Café da Manhã Saudável:**\n\nO café da manhã é importante para iniciar o metabolismo!\n\n**Opções saudáveis:**\n\n**Opção 1 (Clássica):**\n• Pão integral + ovo mexido + abacate\n• Fruta + iogurte natural\n• Café ou chá sem açúcar\n\n**Opção 2 (Energética):**\n• Aveia + banana + pasta de amendoim\n• Leite ou bebida vegetal\n• Castanhas\n\n**Opção 3 (Rápida):**\n• Tapioca + queijo + tomate\n• Suco natural\n• Frutas\n\n**Componentes ideais:**\n✅ Carboidrato integral\n✅ Proteína\n✅ Gordura boa\n✅ Frutas/vegetais\n\n**Evite:** Pular o café da manhã ou comer apenas carboidratos simples!';
+    }
+
+    // PERGUNTAS DO SISTEMA
     if (lowerQuestion.includes('agendar') || lowerQuestion.includes('consulta')) {
       return 'Para agendar uma consulta, você pode:\n\n1. Acessar a página de Agendamento no menu lateral\n2. Selecionar o paciente e o profissional desejado\n3. Escolher data e horário disponível\n4. Confirmar o agendamento\n\nSe precisar de ajuda específica, posso orientá-lo passo a passo!';
     }
@@ -76,21 +130,23 @@ export default function ChatIAPage() {
     }
     
     if (lowerQuestion.includes('ajuda') || lowerQuestion.includes('dúvida')) {
-      return 'Posso ajudar com:\n\n✅ Agendamento de consultas\n✅ Cadastro de pacientes\n✅ Prescrição de receitas e atestados\n✅ Navegação no sistema\n✅ Dicas de acompanhamento\n✅ Configurações do sistema\n\nSobre qual desses tópicos você gostaria de saber mais?';
+      return 'Posso ajudar com:\n\n**Nutrição:**\n🥗 Alimentação saudável e balanceada\n💪 Ganho de massa muscular\n⚖️ Emagrecimento saudável\n🩺 Dietas especiais (diabetes, vegetariana, etc.)\n💊 Suplementação\n💧 Hidratação\n\n**Sistema:**\n✅ Agendamento de consultas\n✅ Cadastro de pacientes\n✅ Prescrição de receitas e atestados\n✅ Navegação no sistema\n\nSobre qual desses tópicos você gostaria de saber mais?';
     }
 
     if (lowerQuestion.includes('acompanhamento') || lowerQuestion.includes('follow-up')) {
       return 'Dicas para acompanhamento eficaz:\n\n1. **Registre tudo**: Mantenha histórico atualizado de cada consulta\n2. **Defina lembretes**: Use o calendário para follow-ups\n3. **Comunicação**: Mantenha contato regular com pacientes\n4. **Documentação**: Prescreva e documente adequadamente\n5. **Análise**: Revise o histórico antes de cada consulta\n\nQuer saber mais sobre algum desses pontos?';
     }
     
-    return 'Entendo sua pergunta. Posso ajudar com:\n\n• Agendamento de consultas\n• Cadastro e gestão de pacientes\n• Prescrição de receitas e atestados\n• Navegação no sistema\n• Dicas de acompanhamento\n\nPoderia reformular sua pergunta ou escolher um dos tópicos acima?';
+    return 'Entendo sua pergunta. Posso ajudar com:\n\n**Temas de Nutrição:**\n🥗 Alimentação saudável\n💪 Ganho de massa muscular\n⚖️ Emagrecimento\n🩺 Dietas especiais\n💊 Suplementação\n💧 Hidratação\n\n**Sistema:**\n• Agendamento de consultas\n• Cadastro e gestão de pacientes\n• Prescrição de receitas e atestados\n• Navegação no sistema\n\nPoderia reformular sua pergunta ou escolher um dos tópicos acima?';
   };
 
   const suggestedQuestions = [
-    'Como agendar uma consulta?',
-    'Como prescrever uma receita?',
-    'Como cadastrar um novo paciente?',
-    'Dicas de acompanhamento de pacientes'
+    'Como ter uma alimentação saudável?',
+    'Qual a importância das proteínas?',
+    'Como ganhar massa muscular?',
+    'Dicas para emagrecer de forma saudável',
+    'Quanto de água devo beber por dia?',
+    'Quais são as melhores fontes de vitaminas?'
   ];
 
   return (
@@ -105,10 +161,10 @@ export default function ChatIAPage() {
               </div>
               <div>
                 <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-                  Chat com IA
+                  Chat com IA - Nutrição
                 </h1>
                 <p className="text-gray-600 dark:text-gray-400">
-                  Assistente virtual para dúvidas e orientações
+                  Assistente virtual para dúvidas nutricionais e orientações de saúde
                 </p>
               </div>
             </div>
@@ -174,7 +230,7 @@ export default function ChatIAPage() {
             {messages.length === 1 && (
               <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-800">
                 <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
-                  Perguntas sugeridas:
+                  Perguntas sugeridas sobre nutrição:
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {suggestedQuestions.map((question, index) => (
@@ -198,7 +254,7 @@ export default function ChatIAPage() {
                   type="text"
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
-                  placeholder="Digite sua pergunta..."
+                  placeholder="Digite sua pergunta sobre nutrição..."
                   disabled={isLoading}
                   className="flex-1 px-4 py-3 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:opacity-50"
                 />
@@ -215,7 +271,7 @@ export default function ChatIAPage() {
                 </button>
               </form>
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 text-center">
-                Este é um assistente virtual. Para emergências, entre em contato com um profissional de saúde.
+                Este assistente fornece orientações gerais. Para orientação personalizada, consulte um nutricionista.
               </p>
             </div>
           </div>

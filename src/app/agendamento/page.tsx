@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, Clock, User, FileText, X, Edit2, Trash2, Search, AlertCircle } from 'lucide-react';
+import { Calendar, Clock, Search, X, Plus, ChevronLeft, ChevronRight, AlertCircle, Edit2, Trash2, Filter, Ticket, User, Users } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { AuthenticatedLayout } from '@/components/custom/authenticated-layout';
 
@@ -27,7 +27,6 @@ interface Appointment {
   professional_id: string;
   status: string;
   notes?: string;
-  ticket_number?: string;
 }
 
 interface AppointmentWithDetails extends Appointment {
@@ -55,8 +54,6 @@ export default function AgendamentoPage() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [showTicketModal, setShowTicketModal] = useState(false);
-  const [selectedTicket, setSelectedTicket] = useState<AppointmentWithDetails | null>(null);
   const [searchPatient, setSearchPatient] = useState('');
   const [validationError, setValidationError] = useState('');
   const [editingAppointment, setEditingAppointment] = useState<AppointmentWithDetails | null>(null);
@@ -85,23 +82,15 @@ export default function AgendamentoPage() {
   const applyFilter = () => {
     let filtered = [...appointments];
 
-    // Filtrar por profissional (se não for "all")
     if (filterProfessional !== 'all') {
       filtered = filtered.filter(apt => apt.professional_id === filterProfessional);
     }
 
-    // Filtrar por status
     if (filterStatus !== 'all') {
       filtered = filtered.filter(apt => apt.status === filterStatus);
     }
 
     setFilteredAppointments(filtered);
-  };
-
-  const generateTicketNumber = () => {
-    const timestamp = Date.now();
-    const random = Math.floor(Math.random() * 1000);
-    return `TKT-${timestamp}-${random}`;
   };
 
   const getDateRange = () => {
@@ -110,18 +99,13 @@ export default function AgendamentoPage() {
 
     switch (viewMode) {
       case 'day':
-        // Mesmo dia
         break;
       case 'week':
-        // Início da semana (domingo)
         start.setDate(start.getDate() - start.getDay());
-        // Fim da semana (sábado)
         end.setDate(start.getDate() + 6);
         break;
       case 'biweekly':
-        // Início da semana (domingo)
         start.setDate(start.getDate() - start.getDay());
-        // Fim de 2 semanas
         end.setDate(start.getDate() + 13);
         break;
       case 'month':
@@ -140,9 +124,8 @@ export default function AgendamentoPage() {
     try {
       const { start, end } = getDateRange();
       
-      // Buscar agendamentos
       const { data: appointmentsData, error: appointmentsError } = await supabase
-        .from('appointments_with_ticket')
+        .from('appointments')
         .select('*')
         .gte('date', start.toISOString().split('T')[0])
         .lte('date', end.toISOString().split('T')[0])
@@ -153,7 +136,6 @@ export default function AgendamentoPage() {
         console.error('Erro ao carregar agendamentos:', appointmentsError);
       }
 
-      // Buscar pacientes
       const { data: patientsData, error: patientsError } = await supabase
         .from('patients')
         .select('id, name, email, phone')
@@ -163,7 +145,6 @@ export default function AgendamentoPage() {
         console.error('Erro ao carregar pacientes:', patientsError);
       }
 
-      // Buscar usuários (REMOVIDO O FILTRO perfil_id=eq.2 que causava erro de UUID)
       const { data: usersData, error: usersError } = await supabase
         .from('usuarios')
         .select('id, nome, perfil_id')
@@ -173,7 +154,6 @@ export default function AgendamentoPage() {
         console.error('Erro ao carregar usuários:', usersError);
       }
 
-      // Combinar dados manualmente
       if (appointmentsData && patientsData && usersData) {
         const appointmentsWithDetails: AppointmentWithDetails[] = appointmentsData.map(apt => {
           const patient = patientsData.find(p => p.id === apt.patient_id);
@@ -206,7 +186,7 @@ export default function AgendamentoPage() {
   ): Promise<{ hasOverlap: boolean; message?: string }> => {
     try {
       const { data, error } = await supabase
-        .from('appointments_with_ticket')
+        .from('appointments')
         .select('id, time, duration')
         .eq('date', date)
         .eq('professional_id', professionalId);
@@ -216,14 +196,11 @@ export default function AgendamentoPage() {
         return { hasOverlap: false };
       }
 
-      // Converter horário para minutos
       const [hours, minutes] = time.split(':').map(Number);
       const startMinutes = hours * 60 + minutes;
       const endMinutes = startMinutes + duration;
 
-      // Verificar sobreposição com outros agendamentos
       for (const apt of data || []) {
-        // Pular o próprio agendamento se estiver editando
         if (excludeAppointmentId && apt.id === excludeAppointmentId) {
           continue;
         }
@@ -232,7 +209,6 @@ export default function AgendamentoPage() {
         const aptStartMinutes = aptHours * 60 + aptMinutes;
         const aptEndMinutes = aptStartMinutes + apt.duration;
 
-        // Verificar se há sobreposição
         if (
           (startMinutes >= aptStartMinutes && startMinutes < aptEndMinutes) ||
           (endMinutes > aptStartMinutes && endMinutes <= aptEndMinutes) ||
@@ -261,7 +237,6 @@ export default function AgendamentoPage() {
       return;
     }
 
-    // Verificar sobreposição de horários
     const overlapCheck = await checkAppointmentOverlap(
       formData.date,
       formData.time,
@@ -277,9 +252,8 @@ export default function AgendamentoPage() {
 
     try {
       if (editingAppointment) {
-        // Atualizar agendamento existente (remarcar)
         const { error } = await supabase
-          .from('appointments_with_ticket')
+          .from('appointments')
           .update({
             patient_id: formData.patient_id,
             professional_id: formData.professional_id,
@@ -299,11 +273,8 @@ export default function AgendamentoPage() {
 
         alert('Consulta remarcada com sucesso!');
       } else {
-        // Criar novo agendamento com ticket
-        const ticketNumber = generateTicketNumber();
-        
         const { error } = await supabase
-          .from('appointments_with_ticket')
+          .from('appointments')
           .insert([{
             patient_id: formData.patient_id,
             professional_id: formData.professional_id,
@@ -311,8 +282,7 @@ export default function AgendamentoPage() {
             time: formData.time,
             duration: formData.duration,
             notes: formData.notes,
-            status: formData.status,
-            ticket_number: ticketNumber
+            status: formData.status
           }]);
 
         if (error) {
@@ -321,7 +291,7 @@ export default function AgendamentoPage() {
           return;
         }
 
-        alert(`Consulta cadastrada com sucesso! Ticket: ${ticketNumber}`);
+        alert('Consulta cadastrada com sucesso!');
       }
       
       setShowModal(false);
@@ -338,7 +308,6 @@ export default function AgendamentoPage() {
       setSearchPatient('');
       setValidationError('');
       
-      // Recarregar dados após criar/remarcar consulta
       await loadData();
     } catch (error) {
       console.error('Erro inesperado:', error);
@@ -371,7 +340,7 @@ export default function AgendamentoPage() {
 
     try {
       const { error } = await supabase
-        .from('appointments_with_ticket')
+        .from('appointments')
         .delete()
         .eq('id', appointmentToDelete.id);
 
@@ -385,21 +354,11 @@ export default function AgendamentoPage() {
       setShowDeleteModal(false);
       setAppointmentToDelete(null);
       
-      // Recarregar dados após excluir
       await loadData();
     } catch (error) {
       console.error('Erro inesperado:', error);
       alert('Erro inesperado ao excluir consulta');
     }
-  };
-
-  const showTicket = (appointment: AppointmentWithDetails) => {
-    setSelectedTicket(appointment);
-    setShowTicketModal(true);
-  };
-
-  const printTicket = () => {
-    window.print();
   };
 
   const getStatusLabel = (status: string) => {
@@ -435,12 +394,10 @@ export default function AgendamentoPage() {
 
     const days = [];
     
-    // Dias do mês anterior
     for (let i = 0; i < startingDayOfWeek; i++) {
       days.push(null);
     }
     
-    // Dias do mês atual
     for (let i = 1; i <= daysInMonth; i++) {
       days.push(new Date(year, month, i));
     }
@@ -587,7 +544,6 @@ export default function AgendamentoPage() {
           </div>
 
           <div className="bg-white dark:bg-gray-900 rounded-xl shadow-xl border border-gray-200 dark:border-gray-800 p-3 sm:p-4">
-            {/* Controles do Calendário */}
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
               <div className="flex items-center gap-2 w-full sm:w-auto justify-center">
                 <button
@@ -660,7 +616,6 @@ export default function AgendamentoPage() {
               </div>
             ) : viewMode === 'month' ? (
               <>
-                {/* Dias da Semana */}
                 <div className="grid grid-cols-7 gap-0.5 sm:gap-1 mb-1">
                   {dayNames.map((day) => (
                     <div
@@ -672,7 +627,6 @@ export default function AgendamentoPage() {
                   ))}
                 </div>
 
-                {/* Grade do Calendário */}
                 <div className="grid grid-cols-7 gap-0.5 sm:gap-1">
                   {days.map((day, index) => {
                     if (!day) {
@@ -726,7 +680,6 @@ export default function AgendamentoPage() {
                           )}
                         </div>
                         
-                        {/* Botão de adicionar ao passar o mouse */}
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -743,7 +696,6 @@ export default function AgendamentoPage() {
                 </div>
               </>
             ) : (
-              /* Visualização de Dia/Semana/Quinzena */
               <div className="space-y-2">
                 {days.map((day) => {
                   const dayAppointments = getAppointmentsForDate(day);
@@ -798,15 +750,6 @@ export default function AgendamentoPage() {
                                       <span className={`px-1.5 py-0.5 text-[10px] rounded-full font-medium whitespace-nowrap ${getStatusColor(apt.status)}`}>
                                         {getStatusLabel(apt.status)}
                                       </span>
-                                      {apt.ticket_number && (
-                                        <button
-                                          onClick={() => showTicket(apt)}
-                                          className="p-1 bg-purple-100 dark:bg-purple-900 hover:bg-purple-200 dark:hover:bg-purple-800 text-purple-700 dark:text-purple-300 rounded transition-colors"
-                                          title="Ver ticket"
-                                        >
-                                          <Ticket className="h-3 w-3" />
-                                        </button>
-                                      )}
                                       <button
                                         onClick={() => handleEdit(apt)}
                                         className="p-1 bg-blue-100 dark:bg-blue-900 hover:bg-blue-200 dark:hover:bg-blue-800 text-blue-700 dark:text-blue-300 rounded transition-colors"
@@ -836,7 +779,6 @@ export default function AgendamentoPage() {
             )}
           </div>
 
-          {/* Detalhes do Dia Selecionado (apenas para visualização mensal) */}
           {selectedDate && viewMode === 'month' && (
             <div className="mt-3 bg-white dark:bg-gray-900 rounded-xl shadow-xl border border-gray-200 dark:border-gray-800 p-3 sm:p-4">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 mb-3">
@@ -889,15 +831,6 @@ export default function AgendamentoPage() {
                             <span className={`px-1.5 py-0.5 text-[10px] rounded-full font-medium whitespace-nowrap ${getStatusColor(apt.status)}`}>
                               {getStatusLabel(apt.status)}
                             </span>
-                            {apt.ticket_number && (
-                              <button
-                                onClick={() => showTicket(apt)}
-                                className="p-1 bg-purple-100 dark:bg-purple-900 hover:bg-purple-200 dark:hover:bg-purple-800 text-purple-700 dark:text-purple-300 rounded transition-colors"
-                                title="Ver ticket"
-                              >
-                                <Ticket className="h-3 w-3" />
-                              </button>
-                            )}
                             <button
                               onClick={() => handleEdit(apt)}
                               className="p-1 bg-blue-100 dark:bg-blue-900 hover:bg-blue-200 dark:hover:bg-blue-800 text-blue-700 dark:text-blue-300 rounded transition-colors"
@@ -923,7 +856,6 @@ export default function AgendamentoPage() {
           )}
         </div>
 
-        {/* Modal de Cadastrar/Remarcar Consulta */}
         {showModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
             <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
@@ -1112,7 +1044,6 @@ export default function AgendamentoPage() {
           </div>
         )}
 
-        {/* Modal de Confirmação de Exclusão */}
         {showDeleteModal && appointmentToDelete && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
             <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl max-w-md w-full p-6">
@@ -1151,103 +1082,6 @@ export default function AgendamentoPage() {
                 >
                   Cancelar
                 </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Modal de Ticket de Atendimento */}
-        {showTicketModal && selectedTicket && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-            <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl max-w-md w-full">
-              <div className="p-6 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-950 dark:to-pink-950">
-                <h2 className="text-xl font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                  <Ticket className="h-6 w-6 text-purple-600" />
-                  Ticket de Atendimento
-                </h2>
-                <button
-                  onClick={() => {
-                    setShowTicketModal(false);
-                    setSelectedTicket(null);
-                  }}
-                  className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 p-2 hover:bg-white dark:hover:bg-gray-800 rounded-lg transition-colors"
-                >
-                  <X className="h-6 w-6" />
-                </button>
-              </div>
-
-              <div className="p-6 space-y-4">
-                <div className="text-center p-4 bg-purple-50 dark:bg-purple-950 rounded-lg border-2 border-dashed border-purple-300 dark:border-purple-700">
-                  <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">Número do Ticket</p>
-                  <p className="text-2xl font-bold font-mono text-purple-600 dark:text-purple-400">
-                    {selectedTicket.ticket_number}
-                  </p>
-                </div>
-
-                <div className="space-y-3">
-                  <div>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Paciente</p>
-                    <p className="text-base font-semibold text-gray-900 dark:text-white">
-                      {selectedTicket.patient_name}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Usuário Responsável</p>
-                    <p className="text-base font-semibold text-gray-900 dark:text-white">
-                      {selectedTicket.professional_name}
-                    </p>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Data</p>
-                      <p className="text-base font-semibold text-gray-900 dark:text-white">
-                        {new Date(selectedTicket.date + 'T00:00:00').toLocaleDateString('pt-BR')}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Horário</p>
-                      <p className="text-base font-semibold text-gray-900 dark:text-white">
-                        {selectedTicket.time.substring(0, 5)}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Status</p>
-                    <span className={`inline-block px-3 py-1 text-sm rounded-full font-medium ${getStatusColor(selectedTicket.status)}`}>
-                      {getStatusLabel(selectedTicket.status)}
-                    </span>
-                  </div>
-
-                  {selectedTicket.notes && (
-                    <div>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Observações</p>
-                      <p className="text-sm text-gray-700 dark:text-gray-300">
-                        {selectedTicket.notes}
-                      </p>
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex gap-3 pt-4">
-                  <button
-                    onClick={printTicket}
-                    className="flex-1 px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-lg transition-all shadow-md"
-                  >
-                    Imprimir Ticket
-                  </button>
-                  <button
-                    onClick={() => {
-                      setShowTicketModal(false);
-                      setSelectedTicket(null);
-                    }}
-                    className="px-4 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-lg transition-colors"
-                  >
-                    Fechar
-                  </button>
-                </div>
               </div>
             </div>
           </div>

@@ -28,6 +28,20 @@ function parseLocalDate(str: string) {
 }
 
 /* ============================================================
+   Timezone helpers (force America/Sao_Paulo)
+============================================================ */
+const TIMEZONE = 'America/Sao_Paulo';
+
+function toDateStrTZ(d: Date) {
+  // returns YYYY-MM-DD for the given date in TIMEZONE
+  return new Intl.DateTimeFormat('en-CA', { timeZone: TIMEZONE }).format(d);
+}
+
+function todayStrTZ() {
+  return toDateStrTZ(new Date());
+}
+
+/* ============================================================
    Tipos
 ============================================================ */
 interface Appointment {
@@ -120,12 +134,16 @@ export default function CalendarioPage() {
   }, [selectedDate, appointments]);
 
   /* ============================================================
-     🎯 Função segura de range de datas
+     🎯 Função segura de range de datas (usando TIMEZONE)
      Semana começando no DOMINGO
   ============================================================ */
   const getDateRange = () => {
-    const start = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate());
-    const end = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate());
+    // get current date string in timezone, then parse to local Date at midnight
+    const currentStr = new Intl.DateTimeFormat('en-CA', { timeZone: TIMEZONE }).format(currentDate);
+    const base = parseLocalDate(currentStr);
+
+    const start = new Date(base.getFullYear(), base.getMonth(), base.getDate());
+    const end = new Date(base.getFullYear(), base.getMonth(), base.getDate());
 
     switch (viewMode) {
       case 'day':
@@ -159,7 +177,7 @@ export default function CalendarioPage() {
   };
 
   /* ============================================================
-     🔥 Carregar dados do Supabase (CORRIGIDO)
+     🔥 Carregar dados do Supabase (USANDO startDate/endDate corretos)
   ============================================================ */
   const loadAppointments = async () => {
     if (!supabase) return;
@@ -271,10 +289,10 @@ export default function CalendarioPage() {
   };
 
   /* ============================================================
-     Filtrar agendamentos por data (seguro)
+     Filtrar agendamentos por data (seguro, com timezone)
   ============================================================ */
   const filterAppointmentsByDate = (date: Date) => {
-    const dateStr = date.toLocaleDateString('en-CA'); // YYYY-MM-DD
+    const dateStr = toDateStrTZ(date); // YYYY-MM-DD in TIMEZONE
     setFilteredAppointments(appointments.filter(a => a.date === dateStr));
   };
 
@@ -373,10 +391,10 @@ export default function CalendarioPage() {
   };
 
   /* ============================================================
-     Abrir modal com data correta
+     Abrir modal com data correta (timezone)
   ============================================================ */
   const openModal = (date?: Date) => {
-    const d = date ? date.toLocaleDateString('en-CA') : new Date().toLocaleDateString('en-CA');
+    const d = date ? toDateStrTZ(date) : todayStrTZ();
 
     setFormData({
       patient_id: '',
@@ -405,13 +423,15 @@ export default function CalendarioPage() {
       days.push(new Date(d));
     }
 
+    const todayStr = todayStrTZ();
+
     return (
       <div className={`grid gap-2 grid-cols-7`}>
         {days.map((day, idx) => {
-          const dateStr = day.toLocaleDateString('en-CA'); // use en-CA to get YYYY-MM-DD without timezone
+          const dateStr = toDateStrTZ(day); // use timezone-aware formatter
           const items = appointments.filter(a => a.date === dateStr);
-          const isToday = dateStr === new Date().toLocaleDateString('en-CA');
-          const isSelected = selectedDate && dateStr === selectedDate.toLocaleDateString('en-CA');
+          const isToday = dateStr === todayStr;
+          const isSelected = selectedDate && dateStr === toDateStrTZ(selectedDate);
 
           return (
             <div

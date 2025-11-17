@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Calendar, Clock, Search, X, Plus, ChevronLeft, ChevronRight, AlertCircle, Edit2, Trash2, Filter, Ticket, User, Users } from 'lucide-react';
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, Clock, User, FileText, X, Edit2, Trash2, Search, AlertCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { AuthenticatedLayout } from '@/components/custom/authenticated-layout';
 

@@ -100,7 +100,7 @@ export default function CalendarioPage() {
     return `TKT-${timestamp}-${random}`;
   };
 
-  const loadAppointments = async () => {
+  const loadData = async () => {
     if (!supabase) {
       console.error('Supabase não configurado');
       return;
@@ -113,10 +113,10 @@ export default function CalendarioPage() {
       const { data: appointmentsData, error: appointmentsError } = await supabase
         .from('appointments_with_ticket')
         .select('*')
-        .gte('date', startDate)
-        .lte('date', endDate)
-        .order('date')
-        .order('time');
+         .gte('date', start.toISOString().split('T')[0])
+        .lte('date', end.toISOString().split('T')[0])
+        .order('date', { ascending: true })
+        .order('time', { ascending: true });
 
       if (appointmentsError) {
         console.error('Erro ao carregar agendamentos:', appointmentsError);

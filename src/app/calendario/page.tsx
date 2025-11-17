@@ -100,7 +100,7 @@ export default function CalendarioPage() {
     return `TKT-${timestamp}-${random}`;
   };
 
-  const loadAppointments = async () => {
+  const loadData = async () => {
     if (!supabase) {
       console.error('Supabase não configurado');
       return;

@@ -5,27 +5,14 @@ import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, Clock, User,
 import { supabase } from '@/lib/supabase';
 import { AuthenticatedLayout } from '@/components/custom/authenticated-layout';
 
-interface Patient {
-  id: string;
-  name: string;
-  email: string;
-  phone: string;
-}
-
-interface User {
-  id: string;
-  nome: string;
-  perfil_id: string;
-}
-
 interface Appointment {
   id: string;
   date: string;
   time: string;
-  duration: number;
   patient_id: string;
   professional_id: string;
   status: string;
+  duration: number;
   notes?: string;
   ticket_number?: string;
 }
@@ -35,7 +22,36 @@ interface AppointmentWithDetails extends Appointment {
   professional_name: string;
 }
 
+interface Patient {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+}
+
+interface UserData {
+  id: string;
+  nome: string;
+  perfil_id: string;
+}
+
 type ViewMode = 'day' | 'week' | 'biweekly' | 'month';
+
+const STATUS_COLORS = {
+  scheduled: 'bg-yellow-100 text-yellow-700 border-yellow-300',
+  confirmed: 'bg-green-100 text-green-700 border-green-300',
+  waiting: 'bg-blue-100 text-blue-700 border-blue-300',
+  completed: 'bg-purple-100 text-purple-700 border-purple-300',
+  no_show: 'bg-red-100 text-red-700 border-red-300',
+};
+
+const STATUS_LABELS = {
+  scheduled: 'Não Confirmado',
+  confirmed: 'Confirmado',
+  waiting: 'Aguardando',
+  completed: 'Concluído',
+  no_show: 'Não Compareceu',
+};
 
 const STATUS_OPTIONS = [
   { value: 'scheduled', label: 'Não Confirmado', color: 'bg-yellow-100 text-yellow-700' },
@@ -45,25 +61,19 @@ const STATUS_OPTIONS = [
   { value: 'completed', label: 'Atendimento Concluído', color: 'bg-purple-100 text-purple-700' }
 ];
 
-export default function AgendamentoPage() {
+export default function CalendarioPage() {
+  const [viewMode, setViewMode] = useState<ViewMode>('week');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [appointments, setAppointments] = useState<AppointmentWithDetails[]>([]);
   const [filteredAppointments, setFilteredAppointments] = useState<AppointmentWithDetails[]>([]);
   const [patients, setPatients] = useState<Patient[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [users, setUsers] = useState<UserData[]>([]);
+  const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [showTicketModal, setShowTicketModal] = useState(false);
-  const [selectedTicket, setSelectedTicket] = useState<AppointmentWithDetails | null>(null);
   const [searchPatient, setSearchPatient] = useState('');
   const [validationError, setValidationError] = useState('');
   const [editingAppointment, setEditingAppointment] = useState<AppointmentWithDetails | null>(null);
-  const [appointmentToDelete, setAppointmentToDelete] = useState<AppointmentWithDetails | null>(null);
-  const [filterProfessional, setFilterProfessional] = useState<string>('all');
-  const [filterStatus, setFilterStatus] = useState<string>('all');
-  const [viewMode, setViewMode] = useState<ViewMode>('month');
   const [formData, setFormData] = useState({
     patient_id: '',
     professional_id: '',
@@ -75,28 +85,14 @@ export default function AgendamentoPage() {
   });
 
   useEffect(() => {
-    loadData();
+    loadAppointments();
   }, [currentDate, viewMode]);
 
   useEffect(() => {
-    applyFilter();
-  }, [appointments, filterProfessional, filterStatus]);
-
-  const applyFilter = () => {
-    let filtered = [...appointments];
-
-    // Filtrar por profissional (se não for "all")
-    if (filterProfessional !== 'all') {
-      filtered = filtered.filter(apt => apt.professional_id === filterProfessional);
+    if (selectedDate) {
+      filterAppointmentsByDate(selectedDate);
     }
-
-    // Filtrar por status
-    if (filterStatus !== 'all') {
-      filtered = filtered.filter(apt => apt.status === filterStatus);
-    }
-
-    setFilteredAppointments(filtered);
-  };
+  }, [selectedDate, appointments]);
 
   const generateTicketNumber = () => {
     const timestamp = Date.now();
@@ -104,7 +100,65 @@ export default function AgendamentoPage() {
     return `TKT-${timestamp}-${random}`;
   };
 
-  const getDateRange = () => {
+  const loadAppointments = async () => {
+    if (!supabase) {
+      console.error('Supabase não configurado');
+      return;
+    }
+    
+    setLoading(true);
+    try {
+      const { startDate, endDate } = getDateRange();
+      
+      const { data: appointmentsData, error: appointmentsError } = await supabase
+        .from('appointments_with_ticket')
+        .select('*')
+        .gte('date', startDate)
+        .lte('date', endDate)
+        .order('date')
+        .order('time');
+
+      if (appointmentsError) {
+        console.error('Erro ao carregar agendamentos:', appointmentsError);
+        return;
+      }
+
+      const { data: patientsData, error: patientsError } = await supabase
+        .from('patients')
+        .select('id, name, email, phone');
+
+      if (patientsError) {
+        console.error('Erro ao carregar pacientes:', patientsError);
+      }
+
+      const { data: professionalsData, error: professionalsError } = await supabase
+        .from('usuarios')
+        .select('id, nome, perfil_id');
+
+      if (professionalsError) {
+        console.error('Erro ao carregar profissionais:', professionalsError);
+      }
+
+      const patientsMap = new Map(patientsData?.map(p => [p.id, p.name]) || []);
+      const professionalsMap = new Map(professionalsData?.map(p => [p.id, p.nome]) || []);
+
+      const appointmentsWithDetails: AppointmentWithDetails[] = (appointmentsData || []).map(apt => ({
+        ...apt,
+        patient_name: patientsMap.get(apt.patient_id) || 'Paciente não encontrado',
+        professional_name: professionalsMap.get(apt.professional_id) || 'Profissional não encontrado',
+      }));
+
+      setAppointments(appointmentsWithDetails);
+      setPatients(patientsData || []);
+      setUsers(professionalsData || []);
+    } catch (error) {
+      console.error('Erro ao carregar dados:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+ const getDateRange = () => {
     const start = new Date(currentDate);
     const end = new Date(currentDate);
 
@@ -131,70 +185,37 @@ export default function AgendamentoPage() {
         break;
     }
 
-    return { start, end };
+    return {
+      startDate: start.toISOString().split('T')[0],
+      endDate: end.toISOString().split('T')[0],
+    };
   };
 
-  const loadData = async () => {
-    setLoading(true);
+  const filterAppointmentsByDate = (date: Date) => {
+    const dateStr = date.toISOString().split('T')[0];
+    const filtered = appointments.filter(apt => apt.date === dateStr);
+    setFilteredAppointments(filtered);
+  };
+
+  const navigateDate = (direction: 'prev' | 'next') => {
+    const newDate = new Date(currentDate);
     
-    try {
-      const { start, end } = getDateRange();
-      
-      // Buscar agendamentos
-      const { data: appointmentsData, error: appointmentsError } = await supabase
-        .from('appointments_with_ticket')
-        .select('*')
-        .gte('date', start.toISOString().split('T')[0])
-        .lte('date', end.toISOString().split('T')[0])
-        .order('date', { ascending: true })
-        .order('time', { ascending: true });
-
-      if (appointmentsError) {
-        console.error('Erro ao carregar agendamentos:', appointmentsError);
-      }
-
-      // Buscar pacientes
-      const { data: patientsData, error: patientsError } = await supabase
-        .from('patients')
-        .select('id, name, email, phone')
-        .order('name');
-
-      if (patientsError) {
-        console.error('Erro ao carregar pacientes:', patientsError);
-      }
-
-      // Buscar usuários (REMOVIDO O FILTRO perfil_id=eq.2 que causava erro de UUID)
-      const { data: usersData, error: usersError } = await supabase
-        .from('usuarios')
-        .select('id, nome, perfil_id')
-        .order('nome');
-
-      if (usersError) {
-        console.error('Erro ao carregar usuários:', usersError);
-      }
-
-      // Combinar dados manualmente
-      if (appointmentsData && patientsData && usersData) {
-        const appointmentsWithDetails: AppointmentWithDetails[] = appointmentsData.map(apt => {
-          const patient = patientsData.find(p => p.id === apt.patient_id);
-          const professional = usersData.find(u => u.id === apt.professional_id);
-          
-          return {
-            ...apt,
-            patient_name: patient?.name || 'Paciente não encontrado',
-            professional_name: professional?.nome || 'Usuário não encontrado'
-          };
-        });
-
-        setAppointments(appointmentsWithDetails);
-        setPatients(patientsData);
-        setUsers(usersData);
-      }
-    } catch (error) {
-      console.error('Erro ao carregar dados:', error);
-    } finally {
-      setLoading(false);
+    switch (viewMode) {
+      case 'day':
+        newDate.setDate(newDate.getDate() + (direction === 'next' ? 1 : -1));
+        break;
+      case 'week':
+        newDate.setDate(newDate.getDate() + (direction === 'next' ? 7 : -7));
+        break;
+      case 'biweekly':
+        newDate.setDate(newDate.getDate() + (direction === 'next' ? 14 : -14));
+        break;
+      case 'month':
+        newDate.setMonth(newDate.getMonth() + (direction === 'next' ? 1 : -1));
+        break;
     }
+    
+    setCurrentDate(newDate);
   };
 
   const checkAppointmentOverlap = async (
@@ -204,6 +225,8 @@ export default function AgendamentoPage() {
     professionalId: string,
     excludeAppointmentId?: string
   ): Promise<{ hasOverlap: boolean; message?: string }> => {
+    if (!supabase) return { hasOverlap: false };
+
     try {
       const { data, error } = await supabase
         .from('appointments_with_ticket')
@@ -216,14 +239,11 @@ export default function AgendamentoPage() {
         return { hasOverlap: false };
       }
 
-      // Converter horário para minutos
       const [hours, minutes] = time.split(':').map(Number);
       const startMinutes = hours * 60 + minutes;
       const endMinutes = startMinutes + duration;
 
-      // Verificar sobreposição com outros agendamentos
       for (const apt of data || []) {
-        // Pular o próprio agendamento se estiver editando
         if (excludeAppointmentId && apt.id === excludeAppointmentId) {
           continue;
         }
@@ -232,7 +252,6 @@ export default function AgendamentoPage() {
         const aptStartMinutes = aptHours * 60 + aptMinutes;
         const aptEndMinutes = aptStartMinutes + apt.duration;
 
-        // Verificar se há sobreposição
         if (
           (startMinutes >= aptStartMinutes && startMinutes < aptEndMinutes) ||
           (endMinutes > aptStartMinutes && endMinutes <= aptEndMinutes) ||
@@ -261,7 +280,11 @@ export default function AgendamentoPage() {
       return;
     }
 
-    // Verificar sobreposição de horários
+    if (!supabase) {
+      setValidationError('Supabase não configurado. Configure as variáveis de ambiente.');
+      return;
+    }
+
     const overlapCheck = await checkAppointmentOverlap(
       formData.date,
       formData.time,
@@ -277,7 +300,6 @@ export default function AgendamentoPage() {
 
     try {
       if (editingAppointment) {
-        // Atualizar agendamento existente (remarcar)
         const { error } = await supabase
           .from('appointments_with_ticket')
           .update({
@@ -299,7 +321,6 @@ export default function AgendamentoPage() {
 
         alert('Consulta remarcada com sucesso!');
       } else {
-        // Criar novo agendamento com ticket
         const ticketNumber = generateTicketNumber();
         
         const { error } = await supabase
@@ -338,157 +359,11 @@ export default function AgendamentoPage() {
       setSearchPatient('');
       setValidationError('');
       
-      // Recarregar dados após criar/remarcar consulta
-      await loadData();
+      await loadAppointments();
     } catch (error) {
       console.error('Erro inesperado:', error);
       setValidationError('Erro inesperado ao processar consulta');
     }
-  };
-
-  const handleEdit = (appointment: AppointmentWithDetails) => {
-    setEditingAppointment(appointment);
-    setFormData({
-      patient_id: appointment.patient_id,
-      professional_id: appointment.professional_id,
-      date: appointment.date,
-      time: appointment.time,
-      duration: appointment.duration,
-      notes: appointment.notes || '',
-      status: appointment.status || 'scheduled'
-    });
-    setValidationError('');
-    setShowModal(true);
-  };
-
-  const handleDeleteClick = (appointment: AppointmentWithDetails) => {
-    setAppointmentToDelete(appointment);
-    setShowDeleteModal(true);
-  };
-
-  const confirmDelete = async () => {
-    if (!appointmentToDelete) return;
-
-    try {
-      const { error } = await supabase
-        .from('appointments_with_ticket')
-        .delete()
-        .eq('id', appointmentToDelete.id);
-
-      if (error) {
-        console.error('Erro ao excluir consulta:', error);
-        alert('Erro ao excluir consulta: ' + error.message);
-        return;
-      }
-
-      alert('Consulta excluída com sucesso!');
-      setShowDeleteModal(false);
-      setAppointmentToDelete(null);
-      
-      // Recarregar dados após excluir
-      await loadData();
-    } catch (error) {
-      console.error('Erro inesperado:', error);
-      alert('Erro inesperado ao excluir consulta');
-    }
-  };
-
-  const showTicket = (appointment: AppointmentWithDetails) => {
-    setSelectedTicket(appointment);
-    setShowTicketModal(true);
-  };
-
-  const printTicket = () => {
-    window.print();
-  };
-
-  const getStatusLabel = (status: string) => {
-    const statusOption = STATUS_OPTIONS.find(opt => opt.value === status);
-    return statusOption?.label || status;
-  };
-
-  const getStatusColor = (status: string) => {
-    const statusOption = STATUS_OPTIONS.find(opt => opt.value === status);
-    return statusOption?.color || 'bg-gray-100 text-gray-700';
-  };
-
-  const getDaysInView = () => {
-    const { start, end } = getDateRange();
-    const days = [];
-    const current = new Date(start);
-
-    while (current <= end) {
-      days.push(new Date(current));
-      current.setDate(current.getDate() + 1);
-    }
-
-    return days;
-  };
-
-  const getDaysInMonth = () => {
-    const year = currentDate.getFullYear();
-    const month = currentDate.getMonth();
-    const firstDay = new Date(year, month, 1);
-    const lastDay = new Date(year, month + 1, 0);
-    const daysInMonth = lastDay.getDate();
-    const startingDayOfWeek = firstDay.getDay();
-
-    const days = [];
-    
-    // Dias do mês anterior
-    for (let i = 0; i < startingDayOfWeek; i++) {
-      days.push(null);
-    }
-    
-    // Dias do mês atual
-    for (let i = 1; i <= daysInMonth; i++) {
-      days.push(new Date(year, month, i));
-    }
-    
-    return days;
-  };
-
-  const getAppointmentsForDate = (date: Date) => {
-    const dateStr = date.toISOString().split('T')[0];
-    return filteredAppointments.filter(apt => apt.date === dateStr);
-  };
-
-  const previousPeriod = () => {
-    const newDate = new Date(currentDate);
-    switch (viewMode) {
-      case 'day':
-        newDate.setDate(newDate.getDate() - 1);
-        break;
-      case 'week':
-        newDate.setDate(newDate.getDate() - 7);
-        break;
-      case 'biweekly':
-        newDate.setDate(newDate.getDate() - 14);
-        break;
-      case 'month':
-        newDate.setMonth(newDate.getMonth() - 1);
-        break;
-    }
-    setCurrentDate(newDate);
-  };
-
-  const nextPeriod = () => {
-    const newDate = new Date(currentDate);
-    switch (viewMode) {
-      case 'day':
-        newDate.setDate(newDate.getDate() + 1);
-        break;
-      case 'week':
-        newDate.setDate(newDate.getDate() + 7);
-        break;
-      case 'biweekly':
-        newDate.setDate(newDate.getDate() + 14);
-        break;
-      case 'month':
-        newDate.setMonth(newDate.getMonth() + 1);
-        break;
-    }
-    setCurrentDate(newDate);
   };
 
   const openModal = (date?: Date) => {
@@ -507,114 +382,165 @@ export default function AgendamentoPage() {
     setShowModal(true);
   };
 
+  const handleNewAppointment = () => {
+    openModal(selectedDate || undefined);
+  };
+
+  const handleEditAppointment = (appointment: AppointmentWithDetails) => {
+    setEditingAppointment(appointment);
+    setFormData({
+      patient_id: appointment.patient_id,
+      professional_id: appointment.professional_id,
+      date: appointment.date,
+      time: appointment.time,
+      duration: appointment.duration,
+      notes: appointment.notes || '',
+      status: appointment.status || 'scheduled'
+    });
+    setValidationError('');
+    setShowModal(true);
+  };
+
+  const handleDeleteAppointment = async (appointmentId: string) => {
+    if (!confirm('Tem certeza que deseja excluir este agendamento?')) return;
+    
+    if (!supabase) return;
+    
+    try {
+      const { error } = await supabase
+        .from('appointments_with_ticket')
+        .delete()
+        .eq('id', appointmentId);
+
+      if (error) {
+        console.error('Erro ao excluir:', error);
+        alert('Erro ao excluir agendamento');
+        return;
+      }
+
+      alert('Agendamento excluído com sucesso!');
+      loadAppointments();
+      if (selectedDate) {
+        filterAppointmentsByDate(selectedDate);
+      }
+    } catch (error) {
+      console.error('Erro:', error);
+      alert('Erro ao excluir agendamento');
+    }
+  };
+
+  const renderCalendar = () => {
+    const { startDate, endDate } = getDateRange();
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const days: Date[] = [];
+
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      days.push(new Date(d));
+    }
+
+    return (
+      <div className={`grid gap-2 ${
+        viewMode === 'day' ? 'grid-cols-1' :
+        viewMode === 'week' ? 'grid-cols-7' :
+        viewMode === 'biweekly' ? 'grid-cols-7' :
+        'grid-cols-7'
+      }`}>
+        {days.map((day, index) => {
+          const dateStr = day.toISOString().split('T')[0];
+          const dayAppointments = appointments.filter(apt => apt.date === dateStr);
+          const isToday = dateStr === new Date().toISOString().split('T')[0];
+          const isSelected = selectedDate && dateStr === selectedDate.toISOString().split('T')[0];
+
+          return (
+            <div
+              key={index}
+              onClick={() => setSelectedDate(day)}
+              className={`p-3 rounded-lg border-2 cursor-pointer transition-all hover:shadow-md ${
+                isSelected 
+                  ? 'border-blue-500 bg-blue-50 dark:bg-blue-950' 
+                  : isToday
+                  ? 'border-green-500 bg-green-50 dark:bg-green-950'
+                  : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900'
+              }`}
+            >
+              <div className="text-center mb-2">
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  {day.toLocaleDateString('pt-BR', { weekday: 'short' })}
+                </p>
+                <p className={`text-lg font-bold ${
+                  isToday ? 'text-green-600 dark:text-green-400' : 
+                  isSelected ? 'text-blue-600 dark:text-blue-400' :
+                  'text-gray-900 dark:text-white'
+                }`}>
+                  {day.getDate()}
+                </p>
+              </div>
+              
+              {dayAppointments.length > 0 && (
+                <div className="space-y-1">
+                  {dayAppointments.slice(0, 3).map((apt) => (
+                    <div
+                      key={apt.id}
+                      className={`text-xs p-1 rounded border ${STATUS_COLORS[apt.status as keyof typeof STATUS_COLORS]}`}
+                    >
+                      <p className="font-medium truncate">{apt.time.substring(0, 5)}</p>
+                      <p className="truncate">{apt.patient_name}</p>
+                    </div>
+                  ))}
+                  {dayAppointments.length > 3 && (
+                    <p className="text-xs text-center text-gray-500">
+                      +{dayAppointments.length - 3} mais
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
   const filteredPatients = patients.filter(patient =>
     patient.name.toLowerCase().includes(searchPatient.toLowerCase()) ||
     patient.email.toLowerCase().includes(searchPatient.toLowerCase()) ||
     patient.phone.includes(searchPatient)
   );
 
-  const getPeriodLabel = () => {
-    const { start, end } = getDateRange();
-    const monthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
-
-    switch (viewMode) {
-      case 'day':
-        return currentDate.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
-      case 'week':
-        return `${start.getDate()} - ${end.getDate()} de ${monthNames[start.getMonth()]} ${start.getFullYear()}`;
-      case 'biweekly':
-        return `${start.getDate()} de ${monthNames[start.getMonth()]} - ${end.getDate()} de ${monthNames[end.getMonth()]} ${start.getFullYear()}`;
-      case 'month':
-        return `${monthNames[currentDate.getMonth()]} ${currentDate.getFullYear()}`;
-    }
-  };
-
-  const days = viewMode === 'month' ? getDaysInMonth() : getDaysInView();
-  const dayNames = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
-
   return (
     <AuthenticatedLayout>
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 dark:from-gray-950 dark:via-slate-900 dark:to-gray-950 p-3 sm:p-4">
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-950 p-6">
         <div className="max-w-7xl mx-auto">
-          <div className="mb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          {/* Header */}
+          <div className="mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div>
-              <h1 className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent mb-1">
-                Agendamento de Consultas
+              <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
+                Calendário de Agendamentos
               </h1>
-              <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
-                Cadastre, visualize e gerencie consultas de pacientes
+              <p className="text-gray-600 dark:text-gray-400">
+                Visualize e gerencie seus agendamentos
               </p>
             </div>
-            <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-              <div className="flex items-center gap-2 w-full sm:w-auto">
-                <Users className="h-4 w-4 text-gray-600 dark:text-gray-400 flex-shrink-0" />
-                <select
-                  value={filterProfessional}
-                  onChange={(e) => setFilterProfessional(e.target.value)}
-                  className="flex-1 sm:flex-none px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-xs shadow-sm"
-                >
-                  <option value="all">Todos os Usuários</option>
-                  {users.map((user) => (
-                    <option key={user.id} value={user.id}>
-                      {user.nome}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex items-center gap-2 w-full sm:w-auto">
-                <Filter className="h-4 w-4 text-gray-600 dark:text-gray-400 flex-shrink-0" />
-                <select
-                  value={filterStatus}
-                  onChange={(e) => setFilterStatus(e.target.value)}
-                  className="flex-1 sm:flex-none px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-xs shadow-sm"
-                >
-                  <option value="all">Todos os Status</option>
-                  {STATUS_OPTIONS.map((status) => (
-                    <option key={status.value} value={status.value}>
-                      {status.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <button
-                onClick={() => openModal()}
-                className="w-full sm:w-auto flex items-center justify-center gap-2 px-3 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-xs rounded-lg transition-all shadow-lg hover:shadow-xl"
-              >
-                <Plus className="h-4 w-4" />
-                <span className="whitespace-nowrap">Nova Consulta</span>
-              </button>
-            </div>
+            <button
+              onClick={handleNewAppointment}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+            >
+              <Plus className="h-5 w-5" />
+              Nova Consulta
+            </button>
           </div>
 
-          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-xl border border-gray-200 dark:border-gray-800 p-3 sm:p-4">
-            {/* Controles do Calendário */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
-              <div className="flex items-center gap-2 w-full sm:w-auto justify-center">
-                <button
-                  onClick={previousPeriod}
-                  className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
-                >
-                  <ChevronLeft className="h-4 w-4 text-gray-600 dark:text-gray-400" />
-                </button>
-                
-                <h2 className="text-sm sm:text-base font-semibold text-gray-900 dark:text-white min-w-[160px] sm:min-w-[180px] text-center">
-                  {getPeriodLabel()}
-                </h2>
-                
-                <button
-                  onClick={nextPeriod}
-                  className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
-                >
-                  <ChevronRight className="h-4 w-4 text-gray-600 dark:text-gray-400" />
-                </button>
-              </div>
-
-              <div className="flex gap-1 w-full sm:w-auto">
+          {/* Controls */}
+          <div className="bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-200 dark:border-gray-800 p-4 mb-6">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+              {/* View Mode Selector */}
+              <div className="flex gap-2">
                 <button
                   onClick={() => setViewMode('day')}
-                  className={`flex-1 sm:flex-none px-2 py-1 text-[10px] sm:text-xs rounded-lg transition-colors ${
+                  className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                     viewMode === 'day'
-                      ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md'
+                      ? 'bg-blue-600 text-white'
                       : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
                   }`}
                 >
@@ -622,9 +548,9 @@ export default function AgendamentoPage() {
                 </button>
                 <button
                   onClick={() => setViewMode('week')}
-                  className={`flex-1 sm:flex-none px-2 py-1 text-[10px] sm:text-xs rounded-lg transition-colors ${
+                  className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                     viewMode === 'week'
-                      ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md'
+                      ? 'bg-blue-600 text-white'
                       : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
                   }`}
                 >
@@ -632,9 +558,9 @@ export default function AgendamentoPage() {
                 </button>
                 <button
                   onClick={() => setViewMode('biweekly')}
-                  className={`flex-1 sm:flex-none px-2 py-1 text-[10px] sm:text-xs rounded-lg transition-colors ${
+                  className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                     viewMode === 'biweekly'
-                      ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md'
+                      ? 'bg-blue-600 text-white'
                       : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
                   }`}
                 >
@@ -642,617 +568,343 @@ export default function AgendamentoPage() {
                 </button>
                 <button
                   onClick={() => setViewMode('month')}
-                  className={`flex-1 sm:flex-none px-2 py-1 text-[10px] sm:text-xs rounded-lg transition-colors ${
+                  className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                     viewMode === 'month'
-                      ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md'
+                      ? 'bg-blue-600 text-white'
                       : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
                   }`}
                 >
                   Mês
                 </button>
               </div>
+
+              {/* Date Navigation */}
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={() => navigateDate('prev')}
+                  className="p-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                >
+                  <ChevronLeft className="h-5 w-5" />
+                </button>
+                
+                <div className="text-center min-w-[200px]">
+                  <p className="text-lg font-semibold text-gray-900 dark:text-white">
+                    {currentDate.toLocaleDateString('pt-BR', { 
+                      month: 'long', 
+                      year: 'numeric' 
+                    })}
+                  </p>
+                </div>
+
+                <button
+                  onClick={() => navigateDate('next')}
+                  className="p-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                >
+                  <ChevronRight className="h-5 w-5" />
+                </button>
+
+                <button
+                  onClick={() => setCurrentDate(new Date())}
+                  className="px-3 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white text-sm font-medium transition-colors"
+                >
+                  Hoje
+                </button>
+              </div>
             </div>
+          </div>
 
+          {/* Calendar Grid */}
+          <div className="bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-200 dark:border-gray-800 p-6 mb-6">
             {loading ? (
-              <div className="text-center py-8">
-                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto"></div>
-                <p className="mt-2 text-xs text-gray-600 dark:text-gray-400">Carregando calendário...</p>
+              <div className="text-center py-12">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+                <p className="mt-4 text-gray-600 dark:text-gray-400">Carregando calendário...</p>
               </div>
-            ) : viewMode === 'month' ? (
-              <>
-                {/* Dias da Semana */}
-                <div className="grid grid-cols-7 gap-0.5 sm:gap-1 mb-1">
-                  {dayNames.map((day) => (
-                    <div
-                      key={day}
-                      className="text-center text-[10px] sm:text-xs font-semibold text-gray-600 dark:text-gray-400 py-1"
-                    >
-                      {day}
-                    </div>
-                  ))}
-                </div>
-
-                {/* Grade do Calendário */}
-                <div className="grid grid-cols-7 gap-0.5 sm:gap-1">
-                  {days.map((day, index) => {
-                    if (!day) {
-                      return <div key={`empty-${index}`} className="aspect-square" />;
-                    }
-
-                    const dayAppointments = getAppointmentsForDate(day);
-                    const isToday = day.toDateString() === new Date().toDateString();
-                    const isSelected = selectedDate && day.toDateString() === selectedDate.toDateString();
-
-                    return (
-                      <div
-                        key={day.toISOString()}
-                        onClick={() => setSelectedDate(day)}
-                        className={`aspect-square border rounded-lg p-0.5 sm:p-1 cursor-pointer transition-all hover:border-blue-400 dark:hover:border-blue-600 hover:shadow-md relative group ${
-                          isToday
-                            ? 'bg-blue-50 dark:bg-blue-950 border-blue-500 shadow-sm'
-                            : isSelected
-                            ? 'bg-indigo-50 dark:bg-indigo-950 border-indigo-500'
-                            : dayAppointments.length > 0
-                            ? 'bg-purple-50 dark:bg-purple-950 border-purple-300 dark:border-purple-700'
-                            : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700'
-                        }`}
-                      >
-                        <div className="flex flex-col h-full">
-                          <div className={`text-[10px] sm:text-xs font-semibold mb-0.5 ${
-                            isToday ? 'text-blue-700 dark:text-blue-400' : 'text-gray-900 dark:text-white'
-                          }`}>
-                            {day.getDate()}
-                          </div>
-                          
-                          {dayAppointments.length > 0 && (
-                            <div className="flex-1 overflow-hidden">
-                              <div className="space-y-0.5">
-                                {dayAppointments.slice(0, 1).map((apt) => (
-                                  <div
-                                    key={apt.id}
-                                    className="text-[8px] sm:text-[10px] bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 px-0.5 py-0.5 rounded truncate"
-                                    title={`${apt.time.substring(0, 5)} - ${apt.patient_name}`}
-                                  >
-                                    {apt.time.substring(0, 5)}
-                                  </div>
-                                ))}
-                                {dayAppointments.length > 1 && (
-                                  <div className="text-[8px] sm:text-[10px] text-gray-600 dark:text-gray-400 font-medium">
-                                    +{dayAppointments.length - 1}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                        
-                        {/* Botão de adicionar ao passar o mouse */}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openModal(day);
-                          }}
-                          className="absolute top-0.5 right-0.5 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 bg-blue-600 hover:bg-blue-700 text-white rounded shadow-lg"
-                          title="Cadastrar consulta"
-                        >
-                          <Plus className="h-2.5 w-2.5" />
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              </>
             ) : (
-              /* Visualização de Dia/Semana/Quinzena */
-              <div className="space-y-2">
-                {days.map((day) => {
-                  const dayAppointments = getAppointmentsForDate(day);
-                  const isToday = day.toDateString() === new Date().toDateString();
-
-                  return (
-                    <div key={day.toISOString()} className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden shadow-sm">
-                      <div className={`p-2 flex items-center justify-between ${
-                        isToday ? 'bg-blue-100 dark:bg-blue-950' : 'bg-gray-50 dark:bg-gray-800'
-                      }`}>
-                        <h3 className="font-semibold text-gray-900 dark:text-white text-xs sm:text-sm">
-                          {day.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: 'short' })}
-                        </h3>
-                        <button
-                          onClick={() => openModal(day)}
-                          className="p-1 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors shadow-md"
-                          title="Cadastrar consulta"
-                        >
-                          <Plus className="h-3 w-3" />
-                        </button>
-                      </div>
-                      <div className="p-2">
-                        {dayAppointments.length === 0 ? (
-                          <p className="text-center py-2 text-gray-500 dark:text-gray-400 text-xs">
-                            Nenhuma consulta agendada
-                          </p>
-                        ) : (
-                          <div className="space-y-1.5">
-                            {dayAppointments.map((apt) => (
-                              <div
-                                key={apt.id}
-                                className="flex flex-col sm:flex-row items-start sm:items-center gap-2 p-2 rounded-lg border bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950 dark:to-indigo-950 border-blue-300 dark:border-blue-700 shadow-sm"
-                              >
-                                <div className="flex items-center gap-1.5 min-w-[60px]">
-                                  <Clock className="h-3 w-3 text-blue-600 flex-shrink-0" />
-                                  <span className="font-semibold text-gray-900 dark:text-white text-xs">
-                                    {apt.time.substring(0, 5)}
-                                  </span>
-                                </div>
-                                
-                                <div className="flex-1 w-full min-w-0">
-                                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1.5">
-                                    <div className="min-w-0 w-full sm:w-auto">
-                                      <p className="font-medium text-gray-900 dark:text-white text-xs truncate">
-                                        {apt.patient_name}
-                                      </p>
-                                      <p className="text-gray-600 dark:text-gray-400 text-[10px] truncate">
-                                        Usuário: {apt.professional_name}
-                                      </p>
-                                    </div>
-                                    <div className="flex items-center gap-1 flex-shrink-0 flex-wrap">
-                                      <span className={`px-1.5 py-0.5 text-[10px] rounded-full font-medium whitespace-nowrap ${getStatusColor(apt.status)}`}>
-                                        {getStatusLabel(apt.status)}
-                                      </span>
-                                      {apt.ticket_number && (
-                                        <button
-                                          onClick={() => showTicket(apt)}
-                                          className="p-1 bg-purple-100 dark:bg-purple-900 hover:bg-purple-200 dark:hover:bg-purple-800 text-purple-700 dark:text-purple-300 rounded transition-colors"
-                                          title="Ver ticket"
-                                        >
-                                          <Ticket className="h-3 w-3" />
-                                        </button>
-                                      )}
-                                      <button
-                                        onClick={() => handleEdit(apt)}
-                                        className="p-1 bg-blue-100 dark:bg-blue-900 hover:bg-blue-200 dark:hover:bg-blue-800 text-blue-700 dark:text-blue-300 rounded transition-colors"
-                                        title="Remarcar consulta"
-                                      >
-                                        <Edit2 className="h-3 w-3" />
-                                      </button>
-                                      <button
-                                        onClick={() => handleDeleteClick(apt)}
-                                        className="p-1 bg-red-100 dark:bg-red-900 hover:bg-red-200 dark:hover:bg-red-800 text-red-700 dark:text-red-300 rounded transition-colors"
-                                        title="Excluir consulta"
-                                      >
-                                        <Trash2 className="h-3 w-3" />
-                                      </button>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+              renderCalendar()
             )}
           </div>
 
-          {/* Detalhes do Dia Selecionado (apenas para visualização mensal) */}
-          {selectedDate && viewMode === 'month' && (
-            <div className="mt-3 bg-white dark:bg-gray-900 rounded-xl shadow-xl border border-gray-200 dark:border-gray-800 p-3 sm:p-4">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 mb-3">
-                <h3 className="text-sm sm:text-base font-semibold text-gray-900 dark:text-white">
-                  {selectedDate.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}
-                </h3>
+          {/* Selected Date Details */}
+          {selectedDate && (
+            <div className="bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-200 dark:border-gray-800 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                  <CalendarIcon className="h-5 w-5 text-blue-600" />
+                  Agendamentos - {selectedDate.toLocaleDateString('pt-BR', { 
+                    weekday: 'long',
+                    day: 'numeric',
+                    month: 'long',
+                    year: 'numeric'
+                  })}
+                </h2>
                 <button
-                  onClick={() => openModal(selectedDate)}
-                  className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-2.5 py-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-xs rounded-lg transition-all shadow-md"
+                  onClick={() => setSelectedDate(null)}
+                  className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
                 >
-                  <Plus className="h-3 w-3" />
-                  Cadastrar Consulta
+                  <X className="h-5 w-5" />
                 </button>
               </div>
 
-              <div className="space-y-1.5">
-                {getAppointmentsForDate(selectedDate).length === 0 ? (
-                  <p className="text-center py-4 text-gray-500 dark:text-gray-400 text-xs">
-                    Nenhuma consulta agendada para este dia
+              {filteredAppointments.length === 0 ? (
+                <div className="text-center py-8">
+                  <CalendarIcon className="h-12 w-12 text-gray-300 dark:text-gray-700 mx-auto mb-3" />
+                  <p className="text-gray-500 dark:text-gray-400">
+                    Nenhum agendamento para esta data
                   </p>
-                ) : (
-                  getAppointmentsForDate(selectedDate).map((apt) => (
+                  <button
+                    onClick={handleNewAppointment}
+                    className="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                  >
+                    Agendar Consulta
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {filteredAppointments.map((apt) => (
                     <div
                       key={apt.id}
-                      className="flex flex-col sm:flex-row items-start sm:items-center gap-2 p-2 rounded-lg border bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950 dark:to-indigo-950 border-blue-300 dark:border-blue-700 shadow-sm"
+                      className={`p-4 rounded-lg border-2 ${STATUS_COLORS[apt.status as keyof typeof STATUS_COLORS]}`}
                     >
-                      <div className="flex items-center gap-1.5 min-w-[60px]">
-                        <Clock className="h-3 w-3 text-blue-600 flex-shrink-0" />
-                        <span className="font-semibold text-gray-900 dark:text-white text-xs">
-                          {apt.time.substring(0, 5)}
-                        </span>
-                      </div>
-                      
-                      <div className="flex-1 w-full min-w-0">
-                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1.5">
-                          <div className="min-w-0 w-full sm:w-auto">
-                            <p className="font-medium text-gray-900 dark:text-white text-xs truncate">
-                              {apt.patient_name}
-                            </p>
-                            <p className="text-gray-600 dark:text-gray-400 text-[10px] truncate">
-                              Agendado por: {apt.professional_name}
-                            </p>
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-2">
+                            <div className="flex items-center gap-2">
+                              <Clock className="h-4 w-4" />
+                              <span className="font-semibold">{apt.time.substring(0, 5)}</span>
+                            </div>
+                            <span className="text-xs px-2 py-1 rounded-full bg-white dark:bg-gray-800">
+                              {apt.duration} min
+                            </span>
+                          </div>
+                          
+                          <div className="space-y-1 text-sm">
+                            <div className="flex items-center gap-2">
+                              <User className="h-4 w-4" />
+                              <span className="font-medium">{apt.patient_name}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <FileText className="h-4 w-4" />
+                              <span>{apt.professional_name}</span>
+                            </div>
+                            {apt.ticket_number && (
+                              <p className="text-xs font-mono">
+                                Ticket: {apt.ticket_number}
+                              </p>
+                            )}
                             {apt.notes && (
-                              <p className="text-gray-500 dark:text-gray-500 text-[10px] mt-0.5 truncate">
+                              <p className="text-xs mt-2 p-2 bg-white dark:bg-gray-800 rounded">
                                 {apt.notes}
                               </p>
                             )}
                           </div>
-                          <div className="flex items-center gap-1 flex-shrink-0 flex-wrap">
-                            <span className={`px-1.5 py-0.5 text-[10px] rounded-full font-medium whitespace-nowrap ${getStatusColor(apt.status)}`}>
-                              {getStatusLabel(apt.status)}
-                            </span>
-                            {apt.ticket_number && (
-                              <button
-                                onClick={() => showTicket(apt)}
-                                className="p-1 bg-purple-100 dark:bg-purple-900 hover:bg-purple-200 dark:hover:bg-purple-800 text-purple-700 dark:text-purple-300 rounded transition-colors"
-                                title="Ver ticket"
-                              >
-                                <Ticket className="h-3 w-3" />
-                              </button>
-                            )}
-                            <button
-                              onClick={() => handleEdit(apt)}
-                              className="p-1 bg-blue-100 dark:bg-blue-900 hover:bg-blue-200 dark:hover:bg-blue-800 text-blue-700 dark:text-blue-300 rounded transition-colors"
-                              title="Remarcar consulta"
-                            >
-                              <Edit2 className="h-3 w-3" />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteClick(apt)}
-                              className="p-1 bg-red-100 dark:bg-red-900 hover:bg-red-200 dark:hover:bg-red-800 text-red-700 dark:text-red-300 rounded transition-colors"
-                              title="Excluir consulta"
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </button>
-                          </div>
+                        </div>
+
+                        <div className="flex flex-col gap-2">
+                          <button
+                            onClick={() => handleEditAppointment(apt)}
+                            className="p-2 bg-blue-100 dark:bg-blue-900 hover:bg-blue-200 dark:hover:bg-blue-800 text-blue-700 dark:text-blue-300 rounded-lg transition-colors"
+                            title="Editar"
+                          >
+                            <Edit2 className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteAppointment(apt.id)}
+                            className="p-2 bg-red-100 dark:bg-red-900 hover:bg-red-200 dark:hover:bg-red-800 text-red-700 dark:text-red-300 rounded-lg transition-colors"
+                            title="Excluir"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
                         </div>
                       </div>
                     </div>
-                  ))
-                )}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
+      </div>
 
-        {/* Modal de Cadastrar/Remarcar Consulta */}
-        {showModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-            <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-              <div className="p-4 sm:p-6 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950 dark:to-indigo-950">
-                <h2 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white">
-                  {editingAppointment ? 'Remarcar Consulta' : 'Cadastrar Nova Consulta'}
-                </h2>
+      {/* Modal de Cadastrar/Editar Consulta */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-4 sm:p-6 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950 dark:to-indigo-950">
+              <h2 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white">
+                {editingAppointment ? 'Editar Consulta' : 'Nova Consulta'}
+              </h2>
+              <button
+                onClick={() => {
+                  setShowModal(false);
+                  setEditingAppointment(null);
+                  setSearchPatient('');
+                  setValidationError('');
+                }}
+                className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 p-2 hover:bg-white dark:hover:bg-gray-800 rounded-lg transition-colors"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4">
+              {validationError && (
+                <div className="flex items-start gap-2 p-4 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg">
+                  <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+                  <p className="text-sm text-red-600 dark:text-red-400">{validationError}</p>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Data da Consulta *
+                </label>
+                <input
+                  type="date"
+                  required
+                  value={formData.date}
+                  onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Buscar Paciente *
+                </label>
+                <div className="relative mb-2">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Digite o nome, email ou telefone do paciente..."
+                    value={searchPatient}
+                    onChange={(e) => setSearchPatient(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                
+                <select
+                  required
+                  value={formData.patient_id}
+                  onChange={(e) => setFormData({ ...formData, patient_id: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Selecione um paciente</option>
+                  {filteredPatients.map((patient) => (
+                    <option key={patient.id} value={patient.id}>
+                      {patient.name} - {patient.phone}
+                    </option>
+                  ))}
+                </select>
+                {filteredPatients.length === 0 && searchPatient && (
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    Nenhum paciente encontrado. Verifique a busca ou cadastre um novo paciente.
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Profissional Responsável *
+                </label>
+                <select
+                  required
+                  value={formData.professional_id}
+                  onChange={(e) => setFormData({ ...formData, professional_id: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Selecione um profissional</option>
+                  {users.map((user) => (
+                    <option key={user.id} value={user.id}>
+                      {user.nome}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Horário *
+                </label>
+                <input
+                  type="time"
+                  required
+                  value={formData.time}
+                  onChange={(e) => setFormData({ ...formData, time: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Duração *
+                </label>
+                <select
+                  required
+                  value={formData.duration}
+                  onChange={(e) => setFormData({ ...formData, duration: Number(e.target.value) })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value={30}>30 minutos</option>
+                  <option value={60}>1 hora</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Status *
+                </label>
+                <select
+                  required
+                  value={formData.status}
+                  onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                >
+                  {STATUS_OPTIONS.map((status) => (
+                    <option key={status.value} value={status.value}>
+                      {status.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Observações
+                </label>
+                <textarea
+                  value={formData.notes}
+                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                  rows={3}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                  placeholder="Observações sobre a consulta..."
+                />
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-3 pt-4">
                 <button
+                  type="submit"
+                  className="flex-1 px-6 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-lg transition-all shadow-lg hover:shadow-xl"
+                >
+                  {editingAppointment ? 'Salvar Alterações' : 'Cadastrar Consulta'}
+                </button>
+                <button
+                  type="button"
                   onClick={() => {
                     setShowModal(false);
                     setEditingAppointment(null);
                     setSearchPatient('');
                     setValidationError('');
                   }}
-                  className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 p-2 hover:bg-white dark:hover:bg-gray-800 rounded-lg transition-colors"
-                >
-                  <X className="h-6 w-6" />
-                </button>
-              </div>
-
-              <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4">
-                {validationError && (
-                  <div className="flex items-start gap-2 p-4 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg">
-                    <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
-                    <p className="text-sm text-red-600 dark:text-red-400">{validationError}</p>
-                  </div>
-                )}
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Data da Consulta *
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    value={formData.date}
-                    onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Buscar Paciente *
-                  </label>
-                  <div className="relative mb-2">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-                    <input
-                      type="text"
-                      placeholder="Digite o nome, email ou telefone do paciente..."
-                      value={searchPatient}
-                      onChange={(e) => setSearchPatient(e.target.value)}
-                      className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                  
-                  <select
-                    required
-                    value={formData.patient_id}
-                    onChange={(e) => setFormData({ ...formData, patient_id: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">Selecione um paciente</option>
-                    {filteredPatients.map((patient) => (
-                      <option key={patient.id} value={patient.id}>
-                        {patient.name} - {patient.phone}
-                      </option>
-                    ))}
-                  </select>
-                  {filteredPatients.length === 0 && searchPatient && (
-                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                      Nenhum paciente encontrado. Verifique a busca ou cadastre um novo paciente.
-                    </p>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Agendado Por (Usuário Responsável) *
-                  </label>
-                  <select
-                    required
-                    value={formData.professional_id}
-                    onChange={(e) => setFormData({ ...formData, professional_id: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">Selecione um usuário</option>
-                    {users.map((user) => (
-                      <option key={user.id} value={user.id}>
-                        {user.nome}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                    Este é o usuário que está realizando o agendamento
-                  </p>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Horário *
-                  </label>
-                  <input
-                    type="time"
-                    required
-                    value={formData.time}
-                    onChange={(e) => setFormData({ ...formData, time: e.target.value })}
-                    min="08:00"
-                    max="18:30"
-                    step="1800"
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-                  />
-                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                    Os horários não podem se sobrepor
-                  </p>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Duração da Consulta *
-                  </label>
-                  <select
-                    required
-                    value={formData.duration}
-                    onChange={(e) => setFormData({ ...formData, duration: Number(e.target.value) })}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value={30}>30 minutos</option>
-                    <option value={60}>1 hora</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Status da Consulta *
-                  </label>
-                  <select
-                    required
-                    value={formData.status}
-                    onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-                  >
-                    {STATUS_OPTIONS.map((status) => (
-                      <option key={status.value} value={status.value}>
-                        {status.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Observações
-                  </label>
-                  <textarea
-                    value={formData.notes}
-                    onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                    rows={3}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-                    placeholder="Observações sobre a consulta..."
-                  />
-                </div>
-
-                <div className="flex flex-col sm:flex-row gap-3 pt-4">
-                  <button
-                    type="submit"
-                    className="flex-1 px-6 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-lg transition-all shadow-lg hover:shadow-xl"
-                  >
-                    {editingAppointment ? 'Remarcar Consulta' : 'Cadastrar Consulta'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowModal(false);
-                      setEditingAppointment(null);
-                      setSearchPatient('');
-                      setValidationError('');
-                    }}
-                    className="px-6 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-lg transition-colors"
-                  >
-                    Cancelar
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-
-        {/* Modal de Confirmação de Exclusão */}
-        {showDeleteModal && appointmentToDelete && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-            <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl max-w-md w-full p-6">
-              <div className="flex items-start gap-4 mb-4">
-                <div className="p-3 bg-red-100 dark:bg-red-900 rounded-full">
-                  <AlertCircle className="h-6 w-6 text-red-600 dark:text-red-400" />
-                </div>
-                <div className="flex-1">
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                    Confirmar Exclusão
-                  </h3>
-                  <p className="text-gray-600 dark:text-gray-400 text-sm mb-4">
-                    Tem certeza que deseja excluir a consulta de <strong>{appointmentToDelete.patient_name}</strong> para o dia{' '}
-                    <strong>{new Date(appointmentToDelete.date + 'T00:00:00').toLocaleDateString('pt-BR')}</strong> às{' '}
-                    <strong>{appointmentToDelete.time.substring(0, 5)}</strong>?
-                  </p>
-                  <p className="text-gray-500 dark:text-gray-500 text-xs">
-                    Esta ação não pode ser desfeita.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex gap-3">
-                <button
-                  onClick={confirmDelete}
-                  className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors shadow-md"
-                >
-                  Sim, Excluir
-                </button>
-                <button
-                  onClick={() => {
-                    setShowDeleteModal(false);
-                    setAppointmentToDelete(null);
-                  }}
-                  className="flex-1 px-4 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-lg transition-colors"
+                  className="px-6 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-lg transition-colors"
                 >
                   Cancelar
                 </button>
               </div>
-            </div>
+            </form>
           </div>
-        )}
-
-        {/* Modal de Ticket de Atendimento */}
-        {showTicketModal && selectedTicket && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-            <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl max-w-md w-full">
-              <div className="p-6 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-950 dark:to-pink-950">
-                <h2 className="text-xl font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                  <Ticket className="h-6 w-6 text-purple-600" />
-                  Ticket de Atendimento
-                </h2>
-                <button
-                  onClick={() => {
-                    setShowTicketModal(false);
-                    setSelectedTicket(null);
-                  }}
-                  className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 p-2 hover:bg-white dark:hover:bg-gray-800 rounded-lg transition-colors"
-                >
-                  <X className="h-6 w-6" />
-                </button>
-              </div>
-
-              <div className="p-6 space-y-4">
-                <div className="text-center p-4 bg-purple-50 dark:bg-purple-950 rounded-lg border-2 border-dashed border-purple-300 dark:border-purple-700">
-                  <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">Número do Ticket</p>
-                  <p className="text-2xl font-bold font-mono text-purple-600 dark:text-purple-400">
-                    {selectedTicket.ticket_number}
-                  </p>
-                </div>
-
-                <div className="space-y-3">
-                  <div>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Paciente</p>
-                    <p className="text-base font-semibold text-gray-900 dark:text-white">
-                      {selectedTicket.patient_name}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Usuário Responsável</p>
-                    <p className="text-base font-semibold text-gray-900 dark:text-white">
-                      {selectedTicket.professional_name}
-                    </p>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Data</p>
-                      <p className="text-base font-semibold text-gray-900 dark:text-white">
-                        {new Date(selectedTicket.date + 'T00:00:00').toLocaleDateString('pt-BR')}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Horário</p>
-                      <p className="text-base font-semibold text-gray-900 dark:text-white">
-                        {selectedTicket.time.substring(0, 5)}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Status</p>
-                    <span className={`inline-block px-3 py-1 text-sm rounded-full font-medium ${getStatusColor(selectedTicket.status)}`}>
-                      {getStatusLabel(selectedTicket.status)}
-                    </span>
-                  </div>
-
-                  {selectedTicket.notes && (
-                    <div>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Observações</p>
-                      <p className="text-sm text-gray-700 dark:text-gray-300">
-                        {selectedTicket.notes}
-                      </p>
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex gap-3 pt-4">
-                  <button
-                    onClick={printTicket}
-                    className="flex-1 px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-lg transition-all shadow-md"
-                  >
-                    Imprimir Ticket
-                  </button>
-                  <button
-                    onClick={() => {
-                      setShowTicketModal(false);
-                      setSelectedTicket(null);
-                    }}
-                    className="px-4 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-lg transition-colors"
-                  >
-                    Fechar
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
+        </div>
+      )}
     </AuthenticatedLayout>
   );
 }
